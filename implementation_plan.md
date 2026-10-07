@@ -3,7 +3,7 @@
 **Course area:** Software Defined Networking and Network Management
 **Team:** Arjun, Danielraj, Madankumar
 **Code location:** `sdn-service-lb/` (this folder)
-**Status (7 Oct 2026):** The full codebase is written. The pure-Python logic passes its 21 unit tests. The parts that need Linux (Ryu controller, Mininet topology, experiments) have not been run yet; they run in the Ubuntu VM (Phase 1).
+**Status (7 Oct 2026):** The full codebase is written, including the extras (DSCP classification, live UDP rebalancing, decision timing, web dashboard, VM setup script, automated functional tests). The pure-Python logic passes 26 unit tests and a static check. The dashboard was checked against a fake controller in light, dark and phone layouts. The parts that need Linux (Ryu controller, Mininet, functional tests, experiments) have not been run yet; they run in the Ubuntu VM (Phase 1).
 
 ---
 
@@ -69,11 +69,16 @@ An SDN controller sees the whole network from one place. For every new flow it:
 | FR-22 | Generate test traffic for every service class | `traffic/udp_client.py`, `udp_echo_server.py`, iperf |
 | FR-23 | Measure latency, throughput, loss, utilisation and fairness | `experiments/run_experiment.py` |
 | FR-24 | Export results and draw comparison charts | `results/*.csv`, `experiments/plot_results.py` |
+| FR-25 | Classify by DSCP marking (overrides the port) | `classification.dscp` in config; `classifier.py` |
+| FR-26 | Move running UDP flows to a clearly better server (with hysteresis) | `rebalance:` in config; `lb_controller._rebalance`, `decision_engine.better_server` |
+| FR-27 | Measure and report decision time | `decision_ms` in `decisions.csv`, `/lb/status`, dashboard |
+| FR-28 | Live web dashboard with mode and rebalance controls | `controller/dashboard.html` at `/lb/dashboard` |
+| FR-29 | Automated environment setup and end-to-end tests | `scripts/setup_vm.sh`, `tests/functional_test.py` |
 
 ### 2.2 Non-functional requirements
 | ID | Category | Requirement | How it is met |
 |---|---|---|---|
-| NFR-1 | Performance | Decision for a new flow in about 10 ms or less | Scoring is O(number of servers); no I/O on the packet-in path apart from one CSV line |
+| NFR-1 | Performance | Decision for a new flow in about 10 ms or less | Scoring is O(number of servers); every decision is timed and avg/p95/max reported |
 | NFR-2 | Performance | After the first packet, traffic is forwarded by the switch | Exact-match flow rules; the controller sees only first packets |
 | NFR-3 | Overhead | Monitoring traffic stays small | 1 small ICMP probe per server per second; port stats every 2 s |
 | NFR-4 | Reliability | Failed server excluded within about 3 s | 3 missed probes at 1 s intervals |
@@ -143,6 +148,7 @@ An SDN controller sees the whole network from one place. For every new flow it:
 | Packet builder | `controller/packets.py` | ARP replies for the VIP, ICMP probe packets |
 | CSV logger | `controller/csv_logger.py` | `logs/decisions.csv`, `logs/metrics.csv` |
 | REST API | `controller/rest_api.py` | JSON endpoints served by ryu-manager's WSGI server |
+| Dashboard | `controller/dashboard.html` | Live server cards, latency chart, score table, flows, mode/rebalance buttons |
 | Server agent | `agent/server_agent.py` | Per-host CPU and memory (processes in the host's network namespace), TCP sessions; optional emulated extra load |
 | Traffic tools | `traffic/udp_client.py`, `udp_echo_server.py` | Paced UDP streams; RTT, jitter, loss and throughput |
 | Topology | `topology/sdn_topology.py` | Builds the network from config; starts agents, iperf, UDP echo and a web server on each server |
@@ -191,6 +197,8 @@ An SDN controller sees the whole network from one place. For every new flow it:
 4. In `service_aware` mode, take the highest score. Ties go to fewer sessions, then the lower server index.
 5. **Pending reservation:** a new assignment reserves the service's `expected_mbps` on that server for 4 s, until port stats catch up. This keeps a burst of simultaneous flows from all landing on one server.
 6. **Sticky table:** repeat PacketIns for the same 5-tuple, sent before the rule is installed, reuse the same server.
+7. **DSCP first:** if the packet carries a DSCP mark listed in `classification.dscp` (46 → voip, 34 → video, 10 → file), that decides the service; otherwise the port does.
+8. **Live rebalancing (optional, UDP only):** every 5 s, a UDP flow of a listed service moves if another server scores ≥ 0.15 higher and the flow has stayed put ≥ 10 s. The new forward rule replaces the old one in place (same match and priority), so the client never notices. TCP is never moved, because that would break the connection.
 
 ### 5.4 Worked example (VoIP flow, srv1 congested by a file transfer)
 | Server | H | B | L (RTT) | P | M | Score (voip weights) |
@@ -228,6 +236,8 @@ Round Robin would send this call to whichever server is next, possibly congested
 | GET | `/lb/flows` | — | active LB flows: client, proto, ports, service, server |
 | POST | `/lb/mode` | `{"mode": "round_robin"}` | new mode (aliases: `rr`, `sa`) |
 | POST | `/lb/weights` | `{"service": "voip", "weights": {"latency": 0.6}}` | updated weights |
+| POST | `/lb/rebalance` | `{"enabled": true}` | new rebalancing state |
+| GET | `/lb/dashboard` | — | the web dashboard (HTML) |
 
 ### 7.2 Agent report (`/tmp/sdn_lb/stats/<server>.json`, every 1 s)
 ```json
@@ -246,17 +256,21 @@ A report older than 5 s counts as stale, and that server's health becomes neutra
 | Phase | Work | Deliverable | Owner (suggested) | Status |
 |---|---|---|---|---|
 | **0. Design** | Problem, use case, architecture, scoring model | Review 1 and 2 slides | All | ✅ Done |
-| **1. Environment** | Enable VT-x in BIOS → VirtualBox → Ubuntu 20.04 VM → install Mininet, OVS, Ryu, Python libraries → `sudo mn --test pingall` and `simple_switch_13` check | Working VM | Madankumar | ⏳ To do |
+| **1. Environment** | Enable VT-x in BIOS → VirtualBox → Ubuntu 20.04 VM → `bash scripts/setup_vm.sh` (installs and self-checks) | Working VM | Madankumar | ✅ Script written, ⏳ run in VM |
 | **2. Core controller** | Config loader, classifier, flow manager, ARP for VIP, LB flows, L2 forwarding | VIP works with round robin | Danielraj | ✅ Code written, ⏳ verify in VM |
 | **3. Monitoring** | Port-stats bandwidth, ICMP probes (RTT/loss), up/down, server agent, server monitor | `lbctl status` shows live metrics | Arjun | ✅ Code written, ⏳ verify in VM |
 | **4. Decision engine** | Factors, weights, selection, pending reservation, sticky table, fallback | Service-aware placement | Danielraj | ✅ Code written, 21 unit tests pass |
-| **5. Management** | REST API, `lbctl`, CSV logs | Runtime mode/weight control | Arjun | ✅ Code written, ⏳ verify in VM |
+| **5. Management** | REST API, `lbctl`, CSV logs, web dashboard, decision timing | Runtime control + demo UI | Arjun | ✅ Code written; dashboard checked against a fake controller, ⏳ verify in VM |
+| **5b. Extensions** | DSCP classification, live UDP rebalancing | Future-work items done early | Danielraj | ✅ Code written + unit tests, ⏳ verify in VM |
 | **6. Topology & traffic** | Mininet topology from config, test services, UDP client/echo | `sdn_topology.py` CLI demo | Madankumar | ✅ Code written, ⏳ verify in VM |
-| **7. Evaluation** | Run experiments (3 repeats × 2 modes), plot, analyse | `results/` CSVs + charts | Madankumar + Arjun | ⏳ To do |
+| **6b. Functional tests** | `sudo python3 tests/functional_test.py` (T1–T13) | Pass/fail report | Arjun | ✅ Script written, ⏳ run in VM |
+| **7. Evaluation** | Run experiments (3 repeats × 2–3 modes), plot, analyse | `results/` CSVs + charts | Madankumar + Arjun | ⏳ To do |
 | **8. Tuning** | Adjust weights/topology if the results are unclear; re-run | Final numbers | Danielraj | ⏳ To do |
 | **9. Documentation** | Report, final slides, demo script, viva prep | Final review package | All | ⏳ To do |
 
 ### 8.1 Phase 1 checklist (environment)
+Short version: steps 1–2 by hand, then `bash scripts/setup_vm.sh` does steps 3–5 and prints ok/fail for each check.
+
 1. BIOS: Intel Virtualization Technology → **Enabled**. Task Manager → CPU should then show "Virtualization: Enabled".
 2. Install VirtualBox. Create a VM with 4 GB RAM, 2–4 CPUs and a 30 GB disk, and install Ubuntu 20.04 Desktop. Add Guest Additions.
 3. Install the packages:
@@ -295,6 +309,7 @@ A report older than 5 s counts as stale, and that server's health becomes neutra
 | Network monitor | Probe reply → RTT and up; foreign ICMP ignored; down after 3 misses; bandwidth from counters; unknown port ignored |
 
 ### 9.2 Integration / functional tests (in the VM)
+Automated by `sudo python3 tests/functional_test.py`, which prints a pass/fail table; T11 is manual.
 | ID | Scenario | Expected result |
 |---|---|---|
 | T1 | ARP for the VIP | Client gets the VIP MAC; `arp -n` on the host shows `00:00:00:00:01:00` |
@@ -307,14 +322,16 @@ A report older than 5 s counts as stale, and that server's health becomes neutra
 | T8 | Agent stopped (`pkill -f "server_agent.py --name srv1"`) | `agent_ok` false after 5 s; health 0.5; still selectable |
 | T9 | Runtime weight change (`lbctl weights voip latency=0`) | VoIP placement changes accordingly |
 | T10 | Mode switch | `rr` cycles servers; `sa` returns to scoring |
-| T11 | Controller restart | Existing flows keep working until they time out; new flows decided after reconnect |
+| T11 | Controller restart (manual) | Existing flows keep working until they time out; new flows decided after reconnect |
+| T12 | DSCP-marked flow (`udp_client.py --dscp 46` to the video port) | Classified as voip |
+| T13 | Live rebalancing: the call's server link turns slow (80 ms) | The UDP call moves to another server without restarting |
 
 ---
 
 ## 10. Evaluation plan
 
 ### 10.1 Experiment design
-- **Independent variable:** mode, Round Robin vs Service-Aware.
+- **Independent variable:** mode, Round Robin vs Service-Aware (optional third: Service-Aware + live rebalancing, `--modes round_robin service_aware service_aware_rebalance`).
 - **Fixed:** topology, server heterogeneity and traffic mix, all from `config.yaml`.
 - **Repeats:** 3 per mode. The order alternates (RR→SA, SA→RR, RR→SA) to avoid order bias.
 - **Per round:** set the mode → wait 12 s for old flows to expire → start the traffic mix → run 20 s → collect.
@@ -383,8 +400,8 @@ python3 experiments/plot_results.py
 - Multi-switch topologies with path selection (combined with Hedera-style rerouting).
 - Distributed or clustered controllers for high availability.
 - Learned or adaptive weights (reinforcement learning on observed QoS).
-- DPI or DSCP-based classification instead of port-based.
-- Migrating stateless UDP flows when a much better server appears.
+- Deep packet inspection (DPI) for traffic that is unmarked and uses non-standard ports. DSCP is already supported.
+- Live migration for TCP, e.g. via connection proxies. UDP migration is already supported.
 - Deployment on a physical OpenFlow testbed.
 
 ---
@@ -392,12 +409,13 @@ python3 experiments/plot_results.py
 ## 14. Demo script for the final review (about 5 minutes)
 1. Show `config.yaml`: servers, services, weights.
 2. Terminal 1: start `ryu-manager controller/lb_controller.py`. Terminal 2: start the topology. Point out "server UP" and "agent reporting" in the logs.
-3. Terminal 3: `lbctl watch`, showing the live RTT, bandwidth and scores per service.
+3. Browser: `http://127.0.0.1:8080/lb/dashboard` (or terminal 3: `lbctl watch`), showing the live RTT, bandwidth and scores per service.
 4. `h1 iperf -c 10.0.0.100 -p 2121 -t 60 &`: watch the chosen server's bandwidth fill up.
 5. `h2 python3 traffic/udp_client.py --host 10.0.0.100 --port 5060 --duration 10`: the call avoids the congested server. Show the decision line with all scores.
 6. `link s1 srv3 down`: the server goes DOWN and new calls go elsewhere. Then `link s1 srv3 up`.
 7. `lbctl mode rr` and repeat step 5 to show the worse result.
-8. Show the experiment charts from `results/plots/`.
+8. Turn on "Rebalance" in the dashboard, start a long call, then slow its server's link in Mininet: the call moves to another server without restarting.
+9. Show the experiment charts from `results/plots/` and the decision time on the dashboard (well under 1 ms).
 
 ## 15. Viva preparation (key questions)
 | Question | Answer |
@@ -410,3 +428,6 @@ python3 experiments/plot_results.py
 | What if all servers look down? | Fallback to round robin, so traffic is never dropped by the decision logic |
 | How do you stop many new flows all going to one server? | Each new assignment reserves its expected bandwidth for 4 s, and the controller counts active flows as sessions |
 | How do you prove it is better? | Same topology and traffic, both modes, 3 repeats, comparing RTT, jitter, loss, throughput and Jain's fairness |
+| What does it cost per flow? | Every decision is timed; avg/p95/max are on the dashboard and in `decisions.csv` |
+| Can a running flow change server? | UDP flows can (stateless), with a 0.15 score gap and 10 s hold time so they don't bounce between servers. TCP flows stay put |
+| What if apps mark their traffic? | DSCP marks (EF, AF41, AF11) override port-based classification |

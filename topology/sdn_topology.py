@@ -36,7 +36,7 @@ def load_config(path=DEFAULT_CONFIG):
         return yaml.safe_load(f)
 
 
-def _link_params(link):
+def link_params(link):
     params = {}
     if link.get('bw'):
         params['bw'] = float(link['bw'])
@@ -56,13 +56,23 @@ def build_network(cfg):
 
     for srv in cfg['servers']:
         host = net.addHost(srv['name'], ip=srv['ip'] + '/24', mac=srv['mac'])
-        net.addLink(host, s1, port2=int(srv['switch_port']), **_link_params(srv.get('link') or {}))
+        net.addLink(host, s1, port2=int(srv['switch_port']), **link_params(srv.get('link') or {}))
     for cl in cfg['clients']:
         host = net.addHost(cl['name'], ip=cl['ip'] + '/24', mac=cl['mac'])
         net.addLink(host, s1, port2=int(cl['switch_port']))
 
     net.build()
     return net
+
+
+def start_agent(net, cfg, srv):
+    """Start the telemetry agent on one server (srv = its entry from config['servers'])."""
+    sim = srv.get('simulate') or {}
+    net.get(srv['name']).cmd(
+        'python3 %s/agent/server_agent.py --name %s --dir %s --extra-cpu %s --extra-mem %s'
+        ' > %s-agent.log 2>&1 &'
+        % (ROOT, srv['name'], cfg['monitoring']['agent_stats_dir'], sim.get('extra_cpu', 0),
+           sim.get('extra_mem', 0), os.path.join(RUN_DIR, 'logs', srv['name'])))
 
 
 def start_services(net, cfg):
@@ -77,12 +87,9 @@ def start_services(net, cfg):
     for srv in cfg['servers']:
         name = srv['name']
         host = net.get(name)
-        sim = srv.get('simulate') or {}
         log = os.path.join(RUN_DIR, 'logs', name)
 
-        host.cmd('python3 %s/agent/server_agent.py --name %s --dir %s --extra-cpu %s --extra-mem %s'
-                 ' > %s-agent.log 2>&1 &'
-                 % (ROOT, name, stats_dir, sim.get('extra_cpu', 0), sim.get('extra_mem', 0), log))
+        start_agent(net, cfg, srv)
         for port in apps.get('iperf_tcp_ports', []):
             host.cmd('iperf -s -p %d > /dev/null 2>&1 &' % port)
         if apps.get('udp_echo_ports'):

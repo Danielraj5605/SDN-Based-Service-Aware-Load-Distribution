@@ -45,7 +45,8 @@ controller/network_monitor.py  bandwidth / latency / loss
 controller/server_monitor.py   reads agent reports
 controller/decision_engine.py  suitability score + round robin baseline
 controller/flow_manager.py     OpenFlow messages
-controller/rest_api.py         REST API (/lb/status, /lb/flows, /lb/mode, /lb/weights)
+controller/rest_api.py         REST API (/lb/status, /lb/flows, /lb/mode, /lb/weights, /lb/rebalance)
+controller/dashboard.html      live web dashboard (served at /lb/dashboard)
 agent/server_agent.py          runs on each server, reports CPU / memory / sessions
 traffic/udp_echo_server.py     UDP echo (VoIP + video tests)
 traffic/udp_client.py          paced UDP client: RTT, jitter, loss, throughput
@@ -54,10 +55,18 @@ experiments/run_experiment.py  Round Robin vs Service-Aware comparison
 experiments/plot_results.py    charts from the experiment CSVs
 tools/lbctl.py                 command-line client for the REST API
 tests/test_logic.py            unit tests (no Mininet/Ryu needed)
+tests/functional_test.py       automated end-to-end tests in Mininet (T1-T13)
+scripts/setup_vm.sh            one-shot VM install + verification
 ```
 
 ## Setup (Ubuntu 20.04 VM)
 
+The quick way, which installs everything and verifies it:
+```bash
+bash scripts/setup_vm.sh
+```
+
+Or by hand:
 ```bash
 sudo apt update
 sudo apt install -y mininet openvswitch-switch iperf python3-pip python3-yaml python3-psutil
@@ -92,7 +101,12 @@ python3 tools/lbctl.py watch          # live table: health, bandwidth, RTT, loss
 python3 tools/lbctl.py flows          # which flow went to which server
 python3 tools/lbctl.py mode rr        # switch to Round Robin (mode sa to switch back)
 python3 tools/lbctl.py weights voip latency=0.7
+python3 tools/lbctl.py rebalance on   # move running UDP flows when a much better server appears
 ```
+
+**Browser: live dashboard** at http://127.0.0.1:8080/lb/dashboard. It shows server health,
+bandwidth, a latency chart, the score table (highlighting the server that would be chosen),
+active flows, and buttons to switch mode and rebalancing.
 
 Every decision is logged to `logs/decisions.csv`, and per-server metrics to `logs/metrics.csv`.
 
@@ -114,11 +128,43 @@ file throughput, link utilisation per server and Jain's fairness index. It write
 - `results/plots/comparison_<tag>.png` and `servers_<tag>.png`: charts
 - `results/summary_<tag>.csv`: the numbers behind the charts
 
+## Extra features
+
+- **DSCP classification:** if a sender marks packets (EF 46 = voice, AF41 34 = video,
+  AF11 10 = bulk), the mark wins over the port. Edit `classification.dscp` in `config.yaml`.
+  Try it with `udp_client.py --dscp 46`.
+- **Live UDP rebalancing** (`rebalance:` in config, off by default, or `lbctl rebalance on`):
+  every 5 s, a running UDP flow moves to another server if that server scores at least 0.15
+  higher and the flow hasn't moved in the last 10 s. TCP flows are never moved.
+- **Decision time:** every decision is timed (`decision_ms` in `logs/decisions.csv`;
+  avg/p95/max in `lbctl status` and on the dashboard).
+
+The experiment can also compare a third mode:
+```bash
+sudo python3 experiments/run_experiment.py --modes round_robin service_aware service_aware_rebalance
+```
+
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -v
+python3 -m unittest discover -s tests -v                 # 26 unit tests, run anywhere
+sudo python3 tests/functional_test.py                    # end-to-end in Mininet (controller must be running)
+sudo python3 tests/functional_test.py --only T4 T6/T7    # selected tests
 ```
+
+| ID | Functional test | Pass criteria |
+|---|---|---|
+| T1 | ARP for the VIP | host learns the VIP MAC |
+| T2 | ICMP via VIP | 0 % loss, replies from the VIP |
+| T3 | HTTP, many connections | 6/6 answered |
+| T10 | Round robin | 4 requests hit 4 different servers |
+| T4 | VoIP under bulk load | VoIP not on the loaded server, RTT < 30 ms |
+| T5 | Two video streams | neither on the 10 Mbit/s server, loss < 10 % |
+| T12 | DSCP | EF-marked UDP/5004 classified as voip |
+| T9 | Runtime weights | bandwidth-only → 100 Mbit/s server; latency-only → lowest-RTT server |
+| T6/T7 | Server failure | marked down ≤ 10 s, avoided, back up after recovery |
+| T8 | Agent stops | noticed, server stays selectable, recovers after restart |
+| T13 | Live rebalancing | a call moves off a server whose link turns slow, without restarting |
 
 ## Troubleshooting
 
@@ -134,6 +180,6 @@ python3 -m unittest discover -s tests -v
 ## Limitations
 
 - Drives a single switch. The VIP rewrite happens at that switch.
-- In-flight TCP connections are never moved. Only new flows are rebalanced, and flows on a failed server are cleared.
+- In-flight TCP connections are never moved. Only UDP flows can be rebalanced live, and flows on a failed server are cleared.
 - Agent reports travel through a shared directory, which works because Mininet hosts share one filesystem. On real hardware you would use REST/gRPC instead.
 - Tested in Mininet (emulated), not on a physical testbed.

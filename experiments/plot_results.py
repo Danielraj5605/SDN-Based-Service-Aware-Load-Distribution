@@ -19,9 +19,12 @@ import pandas as pd                  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS = os.path.join(ROOT, 'results')
 
-# Colour follows the mode, never its position: blue = Round Robin, orange = Service-Aware.
-MODE_COLORS = {'round_robin': '#2a78d6', 'service_aware': '#eb6834'}
-MODE_LABELS = {'round_robin': 'Round Robin', 'service_aware': 'Service-Aware'}
+# Colour follows the mode, never its position: blue = Round Robin, orange = Service-Aware,
+# aqua = Service-Aware with live rebalancing.
+MODE_COLORS = {'round_robin': '#2a78d6', 'service_aware': '#eb6834',
+               'service_aware_rebalance': '#1baf7a'}
+MODE_LABELS = {'round_robin': 'Round Robin', 'service_aware': 'Service-Aware',
+               'service_aware_rebalance': 'SA + rebalance'}
 INK, INK_MUTED, GRID, SURFACE = '#0b0b0b', '#52514e', '#e4e3df', '#fcfcfb'
 
 PANELS = [   # (service, column, title, lower is better)

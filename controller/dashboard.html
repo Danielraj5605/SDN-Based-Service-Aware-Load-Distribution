@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Load Balancer Dashboard</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f3f0; --surface-1: #fcfcfb; --border: #e4e3df; --grid: #ecebe7;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
+  --accent: #2a78d6;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --good: #0ca30c; --critical: #d03b3b; --warning: #fab219;
+  --best-bg: #e3eefb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #111110; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --accent: #3987e5;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --best-bg: #1c3350;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #111110; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --accent: #3987e5;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --best-bg: #1c3350;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--surface-0); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-bottom: 16px; }
+h1 { font-size: 20px; margin: 0; font-weight: 600; }
+h2 { font-size: 14px; margin: 0 0 10px; font-weight: 600; color: var(--text-secondary); }
+.meta { color: var(--text-secondary); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.controls { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button {
+  border: 0; background: var(--surface-1); color: var(--text-secondary);
+  padding: 6px 12px; font: inherit; cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.card-head strong { font-size: 15px; }
+.card-head .ip { color: var(--text-muted); font-size: 12px; }
+.state { margin-left: auto; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+.state svg { width: 12px; height: 12px; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 10px; font-size: 13px; }
+dt { color: var(--text-secondary); }
+dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.meter { height: 8px; border-radius: 4px; background: var(--grid); overflow: hidden; margin: 2px 0 10px; }
+.meter > div { height: 100%; border-radius: 4px; background: var(--accent); transition: width .4s; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--grid); }
+th { color: var(--text-secondary); font-weight: 500; }
+td.num, th.num { text-align: right; }
+.scores td.best { background: var(--best-bg); font-weight: 600; }
+.chart-wrap { position: relative; }
+svg.chart { width: 100%; height: 220px; display: block; }
+svg.chart text { fill: var(--text-muted); font-size: 11px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.tooltip {
+  position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  display: none; white-space: nowrap;
+}
+.error { color: var(--critical); font-size: 13px; margin: 0 0 12px; display: none; }
+.two { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 900px) { .two { grid-template-columns: 1.3fr 1fr; } }
+.empty { color: var(--text-muted); font-size: 13px; }
+.flows-scroll { max-height: 260px; overflow: auto; }
+.grid > *, .two > * { min-width: 0; }
+.table-scroll { overflow-x: auto; }
+@media (max-width: 600px) { .controls { margin-left: 0; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Service-Aware Load Balancer</h1>
+    <div class="meta" id="meta">connecting…</div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Mode">
+        <button data-mode="service_aware">Service-aware</button>
+        <button data-mode="round_robin">Round robin</button>
+      </div>
+      <div class="seg" role="group" aria-label="Live rebalancing">
+        <button data-rebalance="true">Rebalance on</button>
+        <button data-rebalance="false">Off</button>
+      </div>
+    </div>
+  </header>
+  <p class="error" id="error"></p>
+
+  <section class="grid" id="servers"></section>
+
+  <section class="two">
+    <div class="panel">
+      <h2>Round-trip latency to each server (ms), last 2 minutes</h2>
+      <div class="legend" id="legend"></div>
+      <div class="chart-wrap">
+        <svg class="chart" id="chart" role="img" aria-label="Latency per server over time"></svg>
+        <div class="tooltip" id="tip"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Suitability score per service (highlight = would be chosen)</h2>
+      <div class="table-scroll"><table class="scores" id="scores"></table></div>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:12px">
+    <h2 id="flows-title">Active flows</h2>
+    <div class="flows-scroll"><table id="flows"></table></div>
+  </section>
+</main>
+
+<script>
+const SERIES = ['--s1', '--s2', '--s3', '--s4'];
+const HISTORY = 60;                 // samples (2 s apart) = 2 minutes
+const history = {};                 // server -> [{t, rtt}]
+let last = null;
+
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const colorOf = i => css(SERIES[i % SERIES.length]);
+const fmt = (v, d = 1) => v === null || v === undefined ? '–' : Number(v).toFixed(d);
+const unit = (v, d, u) => v === null || v === undefined ? '–' : Number(v).toFixed(d) + ' ' + u;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+async function api(method, path, body) {
+  const r = await fetch(path, {method, headers: {'Content-Type': 'application/json'},
+                               body: body ? JSON.stringify(body) : undefined});
+  if (!r.ok) throw new Error(path + ': HTTP ' + r.status);
+  return r.json();
+}
+
+const ICON_UP = '<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="var(--good)"/><path d="M3.5 6.2l1.7 1.6 3.3-3.4" stroke="#fff" stroke-width="1.5" fill="none"/></svg>';
+const ICON_DOWN = '<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="var(--critical)"/><path d="M4 4l4 4M8 4l-4 4" stroke="#fff" stroke-width="1.5"/></svg>';
+
+function renderServers(st) {
+  document.getElementById('servers').innerHTML = st.servers.map((s, i) => {
+    const pct = s.capacity_mbps ? Math.min(100, 100 * s.used_mbps / s.capacity_mbps) : 0;
+    return `<article class="panel">
+      <div class="card-head">
+        <span class="swatch" style="background:${colorOf(i)}"></span>
+        <strong>${esc(s.name)}</strong><span class="ip">${esc(s.ip)}</span>
+        <span class="state">${s.up ? ICON_UP + 'Up' : ICON_DOWN + 'Down'}</span>
+      </div>
+      <dl>
+        <dt>Bandwidth used</dt><dd>${fmt(s.used_mbps)} / ${fmt(s.capacity_mbps, 0)} Mbit/s</dd>
+      </dl>
+      <div class="meter" title="${fmt(pct, 0)}% of link"><div style="width:${pct}%"></div></div>
+      <dl>
+        <dt>RTT</dt><dd>${unit(s.rtt_ms, 2, 'ms')}</dd>
+        <dt>Probe loss</dt><dd>${unit(s.loss_pct, 1, '%')}</dd>
+        <dt>CPU / memory</dt><dd>${s.agent_ok ? fmt(s.cpu) + ' % / ' + fmt(s.mem) + ' %' : 'agent silent'}</dd>
+        <dt>Sessions</dt><dd>${s.sessions}</dd>
+        <dt>Flows assigned</dt><dd>${s.assigned_total}</dd>
+        <dt>Designated for</dt><dd>${esc(s.services.join(', '))}</dd>
+      </dl>
+    </article>`;
+  }).join('');
+}
+
+function renderScores(st) {
+  const services = Object.keys(st.weights);
+  const up = st.servers.filter(s => s.up);
+  let html = '<tr><th>Service</th>' + st.servers.map(s => `<th class="num">${esc(s.name)}</th>`).join('') + '</tr>';
+  for (const svc of services) {
+    const best = up.length ? up.reduce((a, b) => (b.scores[svc] > a.scores[svc] ? b : a)) : null;
+    html += `<tr><td>${esc(svc)}</td>` + st.servers.map(s =>
+      `<td class="num${st.mode === 'service_aware' && best && s.name === best.name ? ' best' : ''}">${s.up ? fmt(s.scores[svc], 3) : '–'}</td>`
+    ).join('') + '</tr>';
+  }
+  document.getElementById('scores').innerHTML = html;
+}
+
+function renderFlows(flows) {
+  document.getElementById('flows-title').textContent = `Active flows (${flows.length})`;
+  if (!flows.length) {
+    document.getElementById('flows').innerHTML = '<tr><td class="empty">No active load-balanced flows.</td></tr>';
+    return;
+  }
+  const proto = {6: 'TCP', 17: 'UDP', 1: 'ICMP'};
+  const now = Date.now() / 1000;
+  document.getElementById('flows').innerHTML =
+    '<tr><th>Client</th><th>Protocol</th><th class="num">Src port</th><th class="num">Dst port</th><th>Service</th><th>Server</th><th class="num">Age</th></tr>' +
+    flows.sort((a, b) => b.since - a.since).map(f => `<tr>
+      <td>${esc(f.client)}</td><td>${proto[f.proto] || f.proto}</td>
+      <td class="num">${f.src_port ?? '–'}</td><td class="num">${f.dst_port ?? '–'}</td>
+      <td>${esc(f.service)}</td><td>${esc(f.server)}</td><td class="num">${fmt(now - f.since, 0)} s</td></tr>`).join('');
+}
+
+function renderChart() {
+  const svg = document.getElementById('chart');
+  const W = svg.clientWidth || 600, H = 220, L = 40, R = 52, T = 10, B = 22;
+  const names = Object.keys(history);
+  const all = names.flatMap(n => history[n].map(p => p.rtt)).filter(v => v !== null);
+  const maxY = Math.max(10, ...all) * 1.1;
+  const t1 = Date.now() / 1000, t0 = t1 - HISTORY * 2;
+  const x = t => L + (t - t0) / (t1 - t0) * (W - L - R);
+  const y = v => T + (1 - v / maxY) * (H - T - B);
+  let out = '';
+  for (let i = 0; i <= 4; i++) {
+    const v = maxY * i / 4;
+    out += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${css('--grid')}"/>`;
+    out += `<text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v.toFixed(0)}</text>`;
+  }
+  out += `<text x="${L}" y="${H - 6}">-2 min</text><text x="${W - R}" y="${H - 6}" text-anchor="end">now</text>`;
+  const labels = [];
+  names.forEach((n, i) => {
+    const pts = history[n].filter(p => p.rtt !== null && p.t >= t0);
+    if (!pts.length) return;
+    const d = pts.map((p, j) => (j ? 'L' : 'M') + x(p.t).toFixed(1) + ',' + y(p.rtt).toFixed(1)).join('');
+    out += `<path d="${d}" fill="none" stroke="${colorOf(i)}" stroke-width="2" stroke-linejoin="round"/>`;
+    const lp = pts[pts.length - 1];
+    labels.push({n, i, y: y(lp.rtt), x: x(lp.t)});
+  });
+  // Direct labels at the line ends, nudged apart so they never overlap.
+  labels.sort((a, b) => a.y - b.y);
+  for (let k = 1; k < labels.length; k++) labels[k].y = Math.max(labels[k].y, labels[k - 1].y + 12);
+  labels.forEach(l => {
+    out += `<circle cx="${l.x}" cy="${l.y}" r="3" fill="${colorOf(l.i)}" stroke="${css('--surface-1')}" stroke-width="2"/>`;
+    out += `<text x="${l.x + 6}" y="${l.y + 4}" style="fill:${css('--text-secondary')}">${esc(l.n)}</text>`;
+  });
+  out += `<line id="cross" y1="${T}" y2="${H - B}" stroke="${css('--text-muted')}" stroke-dasharray="3 3" visibility="hidden"/>`;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = out;
+  svg.dataset.l = L; svg.dataset.r = W - R; svg.dataset.t0 = t0; svg.dataset.t1 = t1;
+  document.getElementById('legend').innerHTML = names.map((n, i) =>
+    `<span><span class="swatch" style="background:${colorOf(i)}"></span>${esc(n)}</span>`).join('');
+}
+
+function setupHover() {
+  const svg = document.getElementById('chart'), tip = document.getElementById('tip');
+  svg.addEventListener('mousemove', e => {
+    const rect = svg.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (svg.viewBox.baseVal.width / rect.width);
+    const L = +svg.dataset.l, R = +svg.dataset.r;
+    if (px < L || px > R) { tip.style.display = 'none'; return; }
+    const t = +svg.dataset.t0 + (px - L) / (R - L) * (svg.dataset.t1 - svg.dataset.t0);
+    const rows = Object.keys(history).map((n, i) => {
+      const pts = history[n];
+      if (!pts.length) return '';
+      const p = pts.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
+      return `<div><span class="swatch" style="display:inline-block;background:${colorOf(i)}"></span> ${esc(n)}: <b>${unit(p.rtt, 2, 'ms')}</b></div>`;
+    }).join('');
+    const ago = Math.max(0, Date.now() / 1000 - t);
+    tip.innerHTML = `<div style="color:var(--text-muted)">${ago.toFixed(0)} s ago</div>` + rows;
+    tip.style.display = 'block';
+    const left = e.clientX - rect.left + 12;
+    tip.style.left = Math.min(left, rect.width - tip.offsetWidth - 4) + 'px';
+    tip.style.top = '8px';
+    const cross = svg.querySelector('#cross');
+    cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
+  });
+  svg.addEventListener('mouseleave', () => {
+    tip.style.display = 'none';
+    const cross = svg.querySelector('#cross');
+    if (cross) cross.setAttribute('visibility', 'hidden');
+  });
+}
+
+function renderHeader(st) {
+  const d = st.decision_ms || {};
+  document.getElementById('meta').innerHTML =
+    `<span>VIP <b>${esc(st.vip)}</b></span>` +
+    `<span>Switch ${st.switch_connected ? 'connected' : '<b style="color:var(--critical)">not connected</b>'}</span>` +
+    `<span>${st.decisions} decisions</span>` +
+    `<span>decision time avg ${fmt(d.avg, 2)} ms · p95 ${fmt(d.p95, 2)} ms</span>` +
+    `<span>${st.rebalance.migrations} flows rebalanced</span>`;
+  document.querySelectorAll('[data-mode]').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.mode === st.mode)));
+  document.querySelectorAll('[data-rebalance]').forEach(b =>
+    b.setAttribute('aria-pressed', String((b.dataset.rebalance === 'true') === st.rebalance.enabled)));
+}
+
+async function tick() {
+  try {
+    const [st, flows] = await Promise.all([api('GET', '/lb/status'), api('GET', '/lb/flows')]);
+    last = st;
+    for (const s of st.servers) {
+      (history[s.name] = history[s.name] || []).push({t: Date.now() / 1000, rtt: s.rtt_ms});
+      if (history[s.name].length > HISTORY) history[s.name].shift();
+    }
+    renderHeader(st); renderServers(st); renderScores(st); renderFlows(flows); renderChart();
+    document.getElementById('error').style.display = 'none';
+  } catch (e) {
+    const el = document.getElementById('error');
+    el.textContent = 'Cannot reach the controller (' + e.message + '). Is ryu-manager running?';
+    el.style.display = 'block';
+  }
+}
+
+document.querySelectorAll('[data-mode]').forEach(b =>
+  b.addEventListener('click', () => api('POST', '/lb/mode', {mode: b.dataset.mode}).then(tick)));
+document.querySelectorAll('[data-rebalance]').forEach(b =>
+  b.addEventListener('click', () => api('POST', '/lb/rebalance', {enabled: b.dataset.rebalance === 'true'}).then(tick)));
+window.addEventListener('resize', () => last && renderChart());
+setupHover();
+tick();
+setInterval(tick, 2000);
+</script>
+</body>
+</html>

@@ -5,7 +5,10 @@
     python3 tools/lbctl.py flows
     python3 tools/lbctl.py mode rr            (or: sa / service_aware / round_robin)
     python3 tools/lbctl.py weights voip latency=0.6 bandwidth=0.05
+    python3 tools/lbctl.py rebalance on       (or: off) live UDP flow rebalancing
     python3 tools/lbctl.py watch              (refresh status every 2 s)
+
+Web dashboard: http://127.0.0.1:8080/lb/dashboard
 """
 import argparse
 import json
@@ -38,6 +41,10 @@ def print_status(st):
     print('mode: %s   VIP: %s   switch: %s   active flows: %d   decisions: %d'
           % (st['mode'], st['vip'], 'connected' if st['switch_connected'] else 'NOT connected',
              st['active_flows'], st['decisions']))
+    d, rb = st['decision_ms'], st['rebalance']
+    print('decision time: avg %s ms, p95 %s ms, max %s ms   rebalancing: %s (%d moved)'
+          % (fmt(d['avg'], '%.3f'), fmt(d['p95'], '%.3f'), fmt(d['max'], '%.3f'),
+             'on' if rb['enabled'] else 'off', rb['migrations']))
     services = list(st['weights'])
     head = ('%-6s %-4s %-5s %6s %6s %5s %6s %9s %8s %6s  '
             % ('server', 'up', 'agent', 'cpu%', 'mem%', 'sess', 'used', 'avail/cap', 'rtt ms', 'loss%'))
@@ -63,6 +70,8 @@ def main():
     p_w = sub.add_parser('weights')
     p_w.add_argument('service')
     p_w.add_argument('pairs', nargs='+', help='factor=value, e.g. latency=0.6')
+    p_rb = sub.add_parser('rebalance')
+    p_rb.add_argument('state', choices=['on', 'off'])
     args = ap.parse_args()
 
     if args.cmd == 'status':
@@ -82,6 +91,8 @@ def main():
                 f['src_port'] or '-', f['dst_port'] or '-', f['service'], f['server']))
     elif args.cmd == 'mode':
         print(call(args.url, 'POST', '/lb/mode', {'mode': args.mode}))
+    elif args.cmd == 'rebalance':
+        print(call(args.url, 'POST', '/lb/rebalance', {'enabled': args.state == 'on'}))
     elif args.cmd == 'weights':
         weights = {}
         for pair in args.pairs:

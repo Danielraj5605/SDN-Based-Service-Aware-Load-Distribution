@@ -19,7 +19,12 @@ def parse_port_spec(spec):
 
 
 class ServiceClassifier:
-    def __init__(self, services):
+    def __init__(self, services, dscp_map=None):
+        # DSCP marking (if the sender sets one we know) wins over the port.
+        self.dscp_map = {int(k): v for k, v in (dscp_map or {}).items()}
+        for name in self.dscp_map.values():
+            if name not in services:
+                raise ValueError("classification.dscp: unknown service %r" % name)
         self.rules = []     # (ip_proto, lo, hi, service)
         for name, svc in services.items():
             for proto_name, specs in (svc.get('ports') or {}).items():
@@ -30,7 +35,9 @@ class ServiceClassifier:
         # Narrowest rule first, so a single port wins over a range that contains it.
         self.rules.sort(key=lambda r: r[2] - r[1])
 
-    def classify(self, ip_proto, dst_port):
+    def classify(self, ip_proto, dst_port, dscp=0):
+        if dscp and dscp in self.dscp_map:
+            return self.dscp_map[dscp]
         if dst_port is not None:
             for proto, lo, hi, name in self.rules:
                 if proto == ip_proto and lo <= dst_port <= hi:

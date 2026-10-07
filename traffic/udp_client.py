@@ -32,11 +32,14 @@ def main():
     ap.add_argument('--size', type=int, default=160, help='payload bytes')
     ap.add_argument('--duration', type=float, default=10)
     ap.add_argument('--wait', type=float, default=1.0, help='seconds to wait for late replies')
+    ap.add_argument('--dscp', type=int, default=0, help='DSCP mark, e.g. 46 = EF (voice)')
     args = ap.parse_args()
 
     size = max(args.size, HEADER.size)
     padding = b'\0' * (size - HEADER.size)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    if args.dscp:
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, args.dscp << 2)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 * 1024 * 1024)
     sock.connect((args.host, args.port))
     sock.settimeout(0.2)

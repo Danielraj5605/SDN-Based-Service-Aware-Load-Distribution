@@ -28,6 +28,10 @@ _DEFAULTS = {
         'health_mix': {'cpu': 0.5, 'mem': 0.2, 'sessions': 0.3},
         'pending_window': 4,
     },
+    'rebalance': {
+        'enabled': False, 'interval': 5, 'min_gain': 0.15, 'hold_time': 10,
+        'services': ['voip', 'video'],
+    },
 }
 
 
@@ -69,6 +73,8 @@ class Config:
         self.monitoring = _merged(raw, 'monitoring')
         self.flows = _merged(raw, 'flows')
         self.scoring = _merged(raw, 'scoring')
+        self.rebalance = _merged(raw, 'rebalance')
+        self.dscp_map = ((raw.get('classification') or {}).get('dscp')) or {}
 
         self.services = raw.get('services') or {}
         if 'default' not in self.services:
@@ -80,6 +86,13 @@ class Config:
             validate_weights(weights, 'services.%s.weights' % name)
             for key in WEIGHT_KEYS:
                 weights.setdefault(key, 0.0)
+
+        for code, svc in self.dscp_map.items():
+            if not 0 < int(code) < 64 or svc not in self.services:
+                raise ConfigError("classification.dscp: bad entry %r: %r" % (code, svc))
+        for svc in self.rebalance['services']:
+            if svc not in self.services:
+                raise ConfigError("rebalance.services: unknown service %r" % svc)
 
         self.servers = []
         seen_ports, seen_ips = set(), set()

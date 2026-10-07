@@ -81,6 +81,20 @@ class ClassifierTests(unittest.TestCase):
     def test_protocol_matters(self):
         self.assertEqual(self.c.classify(6, 5004), 'default')      # 5004 is only video over UDP
 
+    def test_dscp_overrides_port(self):
+        cfg = make_cfg()
+        c = ServiceClassifier(cfg.services, cfg.dscp_map)
+        self.assertEqual(c.classify(17, 5004, dscp=46), 'voip')    # EF on a video port
+        self.assertEqual(c.classify(6, 8080, dscp=34), 'video')    # AF41
+        self.assertEqual(c.classify(17, 5004, dscp=0), 'video')    # unmarked -> port
+        self.assertEqual(c.classify(17, 5004, dscp=12), 'video')   # unknown mark -> port
+
+    def test_bad_dscp_config(self):
+        def bad(raw):
+            raw['classification'] = {'dscp': {46: 'gaming'}}
+        with self.assertRaises(ConfigError):
+            make_cfg(bad)
+
     def test_port_spec(self):
         self.assertEqual(parse_port_spec('100-200'), (100, 200))
         self.assertEqual(parse_port_spec(80), (80, 80))
@@ -157,6 +171,21 @@ class DecisionTests(unittest.TestCase):
         healthy(self.s1, 4).agent_ok = False
         f = self.engine.factors(self.s1, 'voip', NOW, 100)
         self.assertAlmostEqual(f['health'], self.cfg.scoring['unknown_health'])
+
+    def test_rebalance_moves_off_degraded_server(self):
+        self.all_healthy()
+        self.s1.rtt_ms = 160                    # current server became slow
+        better = self.engine.better_server(self.s1, 'voip', self.cfg.servers, NOW, 0.15)
+        self.assertIs(better, self.s3)
+
+    def test_rebalance_hysteresis(self):
+        self.all_healthy()                      # srv1 is fine: small differences must not move it
+        self.assertIsNone(self.engine.better_server(self.s1, 'voip', self.cfg.servers, NOW, 0.15))
+
+    def test_rebalance_away_from_down_server(self):
+        self.all_healthy()
+        self.s1.up = False
+        self.assertIsNotNone(self.engine.better_server(self.s1, 'voip', self.cfg.servers, NOW, 0.15))
 
     def test_scores_stay_in_range(self):
         self.all_healthy()

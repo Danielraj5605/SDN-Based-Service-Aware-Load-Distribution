@@ -75,6 +75,22 @@ class DecisionEngine:
         best = max(candidates, key=lambda s: (scores[s.name], -s.sessions(), -s.index))
         return best, 'service_aware', scores
 
+    def better_server(self, current, service, servers, now, min_gain):
+        """For live rebalancing: a server scoring at least `min_gain` above `current`, else None.
+
+        The flow's own traffic is part of `current`'s measured load, so the
+        threshold acts as hysteresis against flows bouncing between servers.
+        """
+        candidates = [s for s in servers if s.up and s is not current]
+        if not candidates:
+            return None
+        bw_ref = self.bandwidth_ref(servers)
+        current_score = self.score(current, service, now, bw_ref)[0] if current.up else 0.0
+        best = max(candidates, key=lambda s: (self.score(s, service, now, bw_ref)[0], -s.index))
+        if self.score(best, service, now, bw_ref)[0] - current_score >= min_gain:
+            return best
+        return None
+
     def _round_robin(self, candidates):
         ordered = sorted(candidates, key=lambda s: s.index)
         choice = ordered[self._rr_next % len(ordered)]

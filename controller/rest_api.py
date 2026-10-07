@@ -4,8 +4,11 @@
     GET  /lb/flows     active load-balanced flows and the server each one went to
     POST /lb/mode      {"mode": "service_aware" | "round_robin"}
     POST /lb/weights   {"service": "voip", "weights": {"latency": 0.6, ...}}
+    POST /lb/rebalance {"enabled": true}
+    GET  /lb/dashboard live web dashboard
 """
 import json
+import os
 
 from ryu.app.wsgi import ControllerBase, route
 from webob import Response
@@ -13,6 +16,7 @@ from webob import Response
 from config_loader import ConfigError
 
 APP_KEY = 'sdn_lb_app'
+DASHBOARD = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dashboard.html')
 
 
 def _json(data, status=200):
@@ -47,6 +51,19 @@ class LBRestController(ControllerBase):
         except ConfigError as e:
             return _json({'error': str(e)}, 400)
         return _json({'mode': mode})
+
+    @route('lb', '/lb/dashboard', methods=['GET'])
+    def dashboard(self, req, **kwargs):
+        with open(DASHBOARD, 'rb') as f:
+            return Response(status=200, content_type='text/html', charset='utf-8', body=f.read())
+
+    @route('lb', '/lb/rebalance', methods=['POST', 'PUT'])
+    def set_rebalance(self, req, **kwargs):
+        try:
+            enabled = self.app.set_rebalance(_body(req).get('enabled'))
+        except ConfigError as e:
+            return _json({'error': str(e)}, 400)
+        return _json({'enabled': enabled})
 
     @route('lb', '/lb/weights', methods=['POST', 'PUT'])
     def set_weights(self, req, **kwargs):

@@ -6,6 +6,7 @@ This script builds its own Mininet network, so close any other Mininet first.
 
     sudo python3 experiments/run_experiment.py
     sudo python3 experiments/run_experiment.py --repeats 1 --duration 10     (quick check)
+    sudo python3 experiments/run_experiment.py --modes round_robin service_aware service_aware_rebalance
 
 Writes results/flows_<tag>.csv (one row per flow) and results/rounds_<tag>.csv
 (one row per round: utilisation per server, fairness, assignments).
@@ -102,7 +103,10 @@ def parse_output(tool, out):
 def run_round(net, cfg, rest, mode, round_no, duration, settle):
     vip = cfg['vip']['ip']
     mix = cfg['experiment']['mix']
-    rest('POST', '/lb/mode', {'mode': mode})
+    # "service_aware_rebalance" = service-aware placement + live UDP rebalancing.
+    rebalance = mode == 'service_aware_rebalance'
+    rest('POST', '/lb/mode', {'mode': 'service_aware' if rebalance else mode})
+    rest('POST', '/lb/rebalance', {'enabled': rebalance})
     log('round %d: mode=%s - letting old flows expire (%ds)' % (round_no, mode, settle))
     time.sleep(settle)
 
@@ -215,11 +219,12 @@ def main():
     net = build_network(cfg)
     net.start()
     flow_rows, round_rows = [], []
-    original_mode = None
+    original_mode = original_rebalance = None
     try:
         start_services(net, cfg)
         wait_for_controller(rest, len(cfg['servers']))
-        original_mode = rest('GET', '/lb/status')['mode']
+        status = rest('GET', '/lb/status')
+        original_mode, original_rebalance = status['mode'], status['rebalance']['enabled']
         round_no = 0
         for rep in range(repeats):
             # Alternate the order so neither mode always runs first.
@@ -235,6 +240,7 @@ def main():
         if original_mode:
             try:
                 rest('POST', '/lb/mode', {'mode': original_mode})
+                rest('POST', '/lb/rebalance', {'enabled': original_rebalance})
             except OSError:
                 pass
         stop_services()

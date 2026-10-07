@@ -62,6 +62,22 @@ services:
     expected_mbps: 1
     weights: {health: 0.30, bandwidth: 0.25, latency: 0.20, loss: 0.10, match: 0.15}
 
+# DSCP marking takes priority over ports when a sender sets it (0 = unmarked -> ports).
+#   46 EF = voice, 34 AF41 = video, 10 AF11 = bulk data
+classification:
+  dscp: {46: voip, 34: video, 10: file}
+
+# Live rebalancing of running UDP flows (UDP is stateless, so a flow can move
+# without breaking). Every `interval` seconds, a flow moves if another server
+# scores at least `min_gain` higher and the flow hasn't moved in `hold_time` s.
+# TCP flows are never moved.
+rebalance:
+  enabled: false
+  interval: 5
+  min_gain: 0.15
+  hold_time: 10
+  services: [voip, video]
+
 # Server pool. The servers are deliberately different so that the choice matters.
 #   link.bw in Mbit/s, link.delay one-way, link.loss in percent (Mininet TCLink)
 #   services: what the server is designated for (feeds the "match" factor)
