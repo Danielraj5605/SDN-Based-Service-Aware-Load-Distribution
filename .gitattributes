@@ -1,0 +1,3 @@
+# Scripts run on Linux (Mininet VM): always keep LF line endings
+* text=auto eol=lf
+*.png binary
