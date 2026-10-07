@@ -1,0 +1,129 @@
+# =====================================================================
+#  SDN-Based Service-Aware Load Distribution - configuration
+#  Shared by the Ryu controller, the Mininet topology and the experiments.
+# =====================================================================
+
+# Mode used when the controller starts: service_aware | round_robin
+mode: service_aware
+
+controller:
+  ip: 127.0.0.1
+  port: 6653                          # OpenFlow port the switch connects to
+  rest_url: http://127.0.0.1:8080     # Ryu REST API (ryu-manager --wsapi-port)
+
+# Virtual IP that clients use to reach the server pool
+vip:
+  ip: 10.0.0.100
+  mac: "00:00:00:00:01:00"
+
+monitoring:
+  port_stats_interval: 2      # seconds between OpenFlow port-stats polls
+  probe_interval: 1           # seconds between latency probes (ICMP) to each server
+  probe_timeout: 1.0          # seconds before a probe counts as lost
+  loss_window: 20             # number of recent probes used for the loss rate
+  down_after_missed: 3        # consecutive lost probes before a server is marked DOWN
+  ewma_alpha: 0.5             # smoothing for latency and bandwidth (0..1, higher = reacts faster)
+  agent_stats_dir: /tmp/sdn_lb/stats
+  agent_stale_after: 5        # seconds; older agent reports are ignored
+  metrics_log_interval: 2     # seconds between rows in logs/metrics.csv
+
+flows:
+  priority: 100
+  idle_timeout: 10            # seconds of inactivity before a load-balanced flow expires
+  hard_timeout: 0             # 0 = never
+
+scoring:
+  max_latency_ms: 100         # RTT at or above this gets latency factor 0
+  bandwidth_ref_mbps: 0       # 0 = use the largest server link capacity
+  service_mismatch: 0.3       # match factor for a server not designated for the service
+  unknown_health: 0.5         # health factor used while a server's agent is silent
+  max_sessions: 20            # sessions at which the session part of health reaches 0
+  health_mix: {cpu: 0.5, mem: 0.2, sessions: 0.3}
+  pending_window: 4           # seconds a fresh assignment reserves its expected bandwidth
+
+# Service classes. Ports are destination ports on the VIP; "a-b" is a range.
+# Score = health*w1 + bandwidth*w2 + latency*w3 + loss*w4 + match*w5
+# Weights are normalised automatically, so they don't have to add up to 1.
+services:
+  video:
+    ports: {tcp: [554, 1935, 8554], udp: ["5004-5005"]}
+    expected_mbps: 8
+    weights: {health: 0.20, bandwidth: 0.45, latency: 0.15, loss: 0.05, match: 0.15}
+  voip:
+    ports: {tcp: [5060], udp: [5060, "16384-32767"]}
+    expected_mbps: 0.1
+    weights: {health: 0.15, bandwidth: 0.05, latency: 0.50, loss: 0.15, match: 0.15}
+  file:
+    ports: {tcp: [20, 21, 22, 2121]}
+    expected_mbps: 20
+    weights: {health: 0.25, bandwidth: 0.30, latency: 0.05, loss: 0.25, match: 0.15}
+  default:                    # anything not matched above (web, ICMP, ...)
+    ports: {}
+    expected_mbps: 1
+    weights: {health: 0.30, bandwidth: 0.25, latency: 0.20, loss: 0.10, match: 0.15}
+
+# Server pool. The servers are deliberately different so that the choice matters.
+#   link.bw in Mbit/s, link.delay one-way, link.loss in percent (Mininet TCLink)
+#   services: what the server is designated for (feeds the "match" factor)
+#   simulate: extra CPU/memory % the agent adds, to emulate a busy machine
+servers:
+  - name: srv1                # fast, nearby, general purpose
+    ip: 10.0.0.11
+    mac: "00:00:00:00:00:11"
+    switch_port: 1
+    link: {bw: 100, delay: 2ms, loss: 0}
+    services: [video, voip, file, default]
+    simulate: {extra_cpu: 0, extra_mem: 0}
+
+  - name: srv2                # big pipe but far away: good for bulk, bad for voice
+    ip: 10.0.0.12
+    mac: "00:00:00:00:00:12"
+    switch_port: 2
+    link: {bw: 100, delay: 25ms, loss: 0}
+    services: [video, file, default]
+    simulate: {extra_cpu: 10, extra_mem: 0}
+
+  - name: srv3                # small pipe, very low latency: built for voice
+    ip: 10.0.0.13
+    mac: "00:00:00:00:00:13"
+    switch_port: 3
+    link: {bw: 10, delay: 1ms, loss: 0}
+    services: [voip, default]
+    simulate: {extra_cpu: 0, extra_mem: 0}
+
+  - name: srv4                # busy and slightly lossy
+    ip: 10.0.0.14
+    mac: "00:00:00:00:00:14"
+    switch_port: 4
+    link: {bw: 50, delay: 10ms, loss: 1}
+    services: [video, default]
+    simulate: {extra_cpu: 50, extra_mem: 20}
+
+clients:
+  - {name: h1, ip: 10.0.0.1, mac: "00:00:00:00:00:01", switch_port: 11}
+  - {name: h2, ip: 10.0.0.2, mac: "00:00:00:00:00:02", switch_port: 12}
+  - {name: h3, ip: 10.0.0.3, mac: "00:00:00:00:00:03", switch_port: 13}
+  - {name: h4, ip: 10.0.0.4, mac: "00:00:00:00:00:04", switch_port: 14}
+
+# Applications started on every server by the topology script
+server_apps:
+  iperf_tcp_ports: [2121, 8554]   # bulk TCP sinks (file transfer, TCP video)
+  udp_echo_ports: [5004, 5060]    # UDP echo (video stream, VoIP)
+  http_port: 8080                 # small web page that says which server answered
+
+# Traffic mix used by experiments/run_experiment.py
+#   tool: iperf (TCP bulk, measures throughput) | udp (paced UDP echo, measures RTT/jitter/loss)
+#   start: seconds after the round starts (bulk traffic first, then video, then calls)
+experiment:
+  duration: 20
+  settle_time: 12             # wait after switching mode so old flows expire (> flows.idle_timeout)
+  repeats: 3
+  mix:
+    - {client: h1, service: file,  tool: iperf, port: 2121, start: 0}
+    - {client: h2, service: file,  tool: iperf, port: 2121, start: 0}
+    - {client: h3, service: video, tool: udp,   port: 5004, rate: 500, size: 1000, start: 2}
+    - {client: h4, service: video, tool: udp,   port: 5004, rate: 500, size: 1000, start: 2}
+    - {client: h1, service: voip,  tool: udp,   port: 5060, rate: 50,  size: 160,  start: 4}
+    - {client: h2, service: voip,  tool: udp,   port: 5060, rate: 50,  size: 160,  start: 4}
+    - {client: h3, service: voip,  tool: udp,   port: 5060, rate: 50,  size: 160,  start: 4}
+    - {client: h4, service: voip,  tool: udp,   port: 5060, rate: 50,  size: 160,  start: 4}

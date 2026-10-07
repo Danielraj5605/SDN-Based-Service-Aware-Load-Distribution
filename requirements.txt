@@ -1,0 +1,11 @@
+# Controller side (installed for your user: pip3 install -r requirements.txt)
+# Needs Python 3.8 / 3.9 - Ryu does not run on 3.10+.
+ryu==4.34
+eventlet==0.30.2
+pyyaml
+psutil
+pandas
+matplotlib
+
+# Mininet side runs as root with the system Python; install with apt instead:
+#   sudo apt install -y mininet openvswitch-switch iperf python3-yaml python3-psutil

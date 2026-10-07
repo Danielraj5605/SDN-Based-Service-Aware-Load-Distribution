@@ -1,0 +1,52 @@
+# ---------- Secrets & credentials (never commit) ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+*.ppk
+secrets.*
+*secret*
+*credential*
+credentials.json
+token.json
+*.token
+.netrc
+.pypirc
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+venv/
+.venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---------- Runtime output ----------
+logs/
+*.log
+*.pcap
+*.pcapng
+/tmp/
+
+# ---------- Editors / OS ----------
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
