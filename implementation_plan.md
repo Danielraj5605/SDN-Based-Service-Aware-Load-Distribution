@@ -1,9 +1,84 @@
 # Implementation Plan: SDN-Based Service-Aware Load Distribution
 
-**Course area:** Software Defined Networking and Network Management
-**Team:** Arjun, Danielraj, Madankumar
-**Code location:** `sdn-service-lb/` (this folder)
-**Status (7 Oct 2026):** The full codebase is written, including the extras (DSCP classification, live UDP rebalancing, decision timing, web dashboard, VM setup script, automated functional tests). The pure-Python logic passes 26 unit tests and a static check. The dashboard was checked against a fake controller in light, dark and phone layouts. The parts that need Linux (Ryu controller, Mininet, functional tests, experiments) have not been run yet; they run in the Ubuntu VM (Phase 1).
+**Course area:** Software Defined Networking and Network Management  
+**Team:** Arjun, Danielraj, Madankumar  
+**Code location:** `sdn-service-lb/` (this folder)  
+**Repository:** https://github.com/Danielraj5605/SDN-Based-Service-Aware-Load-Distribution  
+**Status (7 Oct 2026):** All code is written and pushed. Nothing has run in the Ubuntu VM yet. See section 0 for exactly what is done and what remains.
+
+---
+
+## 0. Implementation status at a glance
+
+**How each part has been checked so far:**
+- **Unit-tested:** covered by `tests/test_logic.py` (26 tests, all passing).
+- **Static-checked:** pyflakes found no undefined names, typos or unused imports; every file is valid Python 3.8 syntax.
+- **Mock-tested:** run against a fake controller on Windows.
+- **Not run yet:** needs the Ubuntu VM (Ryu and Mininet only run on Linux).
+
+### 0.1 Done ✅
+
+| Area | What is implemented | Files | Checked so far |
+|---|---|---|---|
+| Configuration | VIP, 4 heterogeneous servers, links, service ports, weights, DSCP map, rebalance settings, experiment mix; validation with clear errors | `config.yaml`, `controller/config_loader.py` | Unit-tested |
+| Service classification | Port/range-based (TCP/UDP); DSCP marks override ports; ICMP and anything else → default | `controller/classifier.py` | Unit-tested |
+| Network monitoring | Bandwidth from OpenFlow port stats (EWMA); RTT and loss from ICMP probes injected at the VIP; down after 3 missed probes | `controller/network_monitor.py`, `controller/packets.py` | Unit-tested (logic); packet I/O not run yet |
+| Server monitoring | Per-host agent: CPU/memory of processes in the host's network namespace, TCP sessions, emulated extra load; controller marks stale agents | `agent/server_agent.py`, `controller/server_monitor.py` | Static-checked; not run yet |
+| Decision engine | 5-factor weighted score, per-service weights, tie-break, pending-bandwidth reservation, round robin baseline, fallback when nothing is up, rebalance check with hysteresis | `controller/decision_engine.py`, `controller/models.py` | Unit-tested |
+| Flow management | Table-miss rule, VIP ARP responder, forward/reverse rewrite rules, idle timeouts, cookie per server, delete-by-server on failure, sticky 5-tuple table, L2 learning for non-VIP traffic | `controller/flow_manager.py`, `controller/lb_controller.py` | Static-checked; not run yet |
+| Live UDP rebalancing | Moves running UDP flows (voip/video) to a clearly better server; off by default | `controller/lb_controller.py` (`_rebalance`) | Unit-tested (decision); flow moves not run yet |
+| Decision timing | Every decision timed; avg/p95/max reported | `controller/lb_controller.py`, `logs/decisions.csv` | Static-checked; not run yet |
+| REST API | `/lb/status`, `/lb/flows`, `/lb/mode`, `/lb/weights`, `/lb/rebalance`, `/lb/dashboard` | `controller/rest_api.py` | Static-checked; not run yet |
+| CLI | `status`, `watch`, `flows`, `mode`, `weights`, `rebalance` | `tools/lbctl.py` | Static-checked; not run yet |
+| Web dashboard | Server cards, 2-minute latency chart with hover, score table, active flows, mode and rebalance buttons; light/dark; phone layout | `controller/dashboard.html` | Mock-tested (screenshots in light, dark and 390 px phone width) |
+| Logging | `logs/decisions.csv` (incl. decision_ms), `logs/metrics.csv` | `controller/csv_logger.py` | Static-checked; not run yet |
+| Topology | Single OVS switch, 4 clients, 4 servers with TCLink bw/delay/loss from config; starts agent, iperf, UDP echo and web server on each server | `topology/sdn_topology.py` | Static-checked; not run yet |
+| Traffic tools | Paced UDP client (RTT, p95, jitter, loss, throughput, DSCP), UDP echo server | `traffic/` | Static-checked; not run yet |
+| Experiments | RR vs SA (optional SA + rebalance), 3 repeats, alternating order, per-flow and per-round CSVs, Jain's fairness | `experiments/run_experiment.py` | Static-checked; not run yet |
+| Charts | 7-panel QoS comparison + per-server utilisation and flow count, validated colour palette | `experiments/plot_results.py` | Mock-tested with synthetic data |
+| VM setup | One-shot install + verification (Python version, packages, Ryu, unit tests, Mininet pingall) | `scripts/setup_vm.sh` | bash syntax checked; not run yet |
+| Functional tests | Automated T1–T10, T12 (DSCP), T13 (rebalancing) with a pass/fail table | `tests/functional_test.py` | Static-checked; not run yet |
+| Documentation | README, this plan, requirements, `.gitignore` (secrets), `.gitattributes` (LF endings) | repo root | Done |
+| Version control | GitHub repository created; all work pushed to `main` | GitHub | Done |
+
+### 0.2 Remaining ⏳
+
+In order. Each item has an owner (suggested), how to do it, and when it counts as done.
+
+| # | Task | Owner | How | Done when |
+|---|---|---|---|---|
+| R1 | Enable CPU virtualisation | Madankumar | BIOS → Intel Virtualization Technology → Enabled (it currently shows disabled on the laptop) | Task Manager shows "Virtualization: Enabled" |
+| R2 | Create the VM | Madankumar | VirtualBox + Ubuntu 20.04 Desktop, 4 GB RAM, 2–4 CPUs, 30 GB disk | Ubuntu desktop boots |
+| R3 | Install and self-check | Madankumar | `git clone …`, then `bash scripts/setup_vm.sh` | Every line prints `[ok]`, including Mininet pingall |
+| R4 | First controller bring-up | Danielraj | Section 8.2, steps 1–10 | All 4 servers UP with agents reporting; VIP ping, curl, VoIP and iperf work |
+| R5 | Fix first-run issues | Danielraj | Paste errors and fix (see 0.3 for likely spots) | No tracebacks in ryu-manager output |
+| R6 | Functional tests | Arjun | `sudo python3 tests/functional_test.py` | 11/11 PASS (or failures understood and fixed) |
+| R7 | Controller restart test (T11) | Arjun | Manual: stop ryu-manager while traffic runs, check existing flows continue, restart | Behaviour recorded for the report |
+| R8 | Dashboard in the real setup | Arjun | Open `http://127.0.0.1:8080/lb/dashboard` in the VM's browser | Live data shows; mode and rebalance buttons work |
+| R9 | Main experiment | Madankumar | `sudo python3 experiments/run_experiment.py`, then `python3 experiments/plot_results.py` | `results/plots/*.png` and the summary CSV produced |
+| R10 | Rebalancing experiment (optional) | Madankumar | Add `--modes round_robin service_aware service_aware_rebalance` | A third bar in every chart |
+| R11 | Tuning, if differences are small | Danielraj | Increase server differences or flow count in `config.yaml`; re-run R9 | Clear, repeatable gap between modes |
+| R12 | Wireshark evidence for the report | Arjun | `sudo wireshark` on `lo`, filter `openflow_v4`; capture PacketIn → FlowMod for one flow | Screenshot of the control-plane exchange |
+| R13 | Decision-time evidence | Danielraj | Read avg/p95 from `lbctl status` after R9 | Number quoted in the report for NFR-1 |
+| R14 | Commit results | Any | `git add results/ && git commit && git push` | Charts and CSVs in the repository |
+| R15 | Final report | All | Use sections 1–13 of this plan plus the R9–R13 results | Report submitted |
+| R16 | Final slides and demo rehearsal | All | Section 14 demo script, timed at about 5 minutes | Rehearsed once end-to-end in the VM |
+| R17 | Keep this plan current | Any | Mark R-items done; record the measured numbers | Status line matches reality |
+
+### 0.3 Not verified yet; watch these on the first VM run
+
+| Item | Why it might need a fix | Quick check |
+|---|---|---|
+| Ryu install | `pip install ryu` can fail with newer setuptools | The setup script already pins `setuptools<58` and `eventlet==0.30.2` |
+| REST port 8080 | Another service may already use it | `ss -ltnp` shows the port; if busy, run `ryu-manager --wsapi-port 8081 …` and change `rest_url` |
+| ICMP probes | Servers must answer echo requests from the VIP and resolve the VIP via ARP | `lbctl status` shows an RTT for every server |
+| Agent per-namespace CPU | Reads `/proc/<pid>/ns/net` (needs root, which Mininet hosts have) | `cat /tmp/sdn_lb/stats/srv1.json` |
+| iperf CSV parsing | `iperf -y C` output can differ between iperf2 versions | `throughput_mbps` is filled in `results/flows_*.csv` |
+| Rule replacement on rebalance | Relies on OVS replacing a rule with the same match and priority | T13 passes; `ovs-ofctl -O OpenFlow13 dump-flows s1` shows the new server |
+| Link reconfiguration in T13 | Uses Mininet `TCIntf.config` to change delay at runtime | T13 passes |
+
+### 0.4 Deliberately not implemented (out of scope / future work)
+Multi-switch topologies and path selection, multiple or clustered controllers, ML/auto-tuned weights, deep packet inspection, live migration of TCP connections, physical testbed (see sections 12–13).
 
 ---
 
@@ -253,20 +328,23 @@ A report older than 5 s counts as stale, and that server's health becomes neutra
 
 ## 8. Implementation phases
 
+Overall progress: the code for phases 0–6b is written but not yet verified in the VM; phases 7–9 are still to do (see 0.2).
+
 | Phase | Work | Deliverable | Owner (suggested) | Status |
 |---|---|---|---|---|
 | **0. Design** | Problem, use case, architecture, scoring model | Review 1 and 2 slides | All | ✅ Done |
+| **0b. Repository** | GitHub repo, `.gitignore` for secrets, LF line endings | Shared code base | Danielraj | ✅ Done |
 | **1. Environment** | Enable VT-x in BIOS → VirtualBox → Ubuntu 20.04 VM → `bash scripts/setup_vm.sh` (installs and self-checks) | Working VM | Madankumar | ✅ Script written, ⏳ run in VM |
 | **2. Core controller** | Config loader, classifier, flow manager, ARP for VIP, LB flows, L2 forwarding | VIP works with round robin | Danielraj | ✅ Code written, ⏳ verify in VM |
 | **3. Monitoring** | Port-stats bandwidth, ICMP probes (RTT/loss), up/down, server agent, server monitor | `lbctl status` shows live metrics | Arjun | ✅ Code written, ⏳ verify in VM |
-| **4. Decision engine** | Factors, weights, selection, pending reservation, sticky table, fallback | Service-aware placement | Danielraj | ✅ Code written, 21 unit tests pass |
+| **4. Decision engine** | Factors, weights, selection, pending reservation, sticky table, fallback | Service-aware placement | Danielraj | ✅ Code written, unit tests pass |
 | **5. Management** | REST API, `lbctl`, CSV logs, web dashboard, decision timing | Runtime control + demo UI | Arjun | ✅ Code written; dashboard checked against a fake controller, ⏳ verify in VM |
 | **5b. Extensions** | DSCP classification, live UDP rebalancing | Future-work items done early | Danielraj | ✅ Code written + unit tests, ⏳ verify in VM |
 | **6. Topology & traffic** | Mininet topology from config, test services, UDP client/echo | `sdn_topology.py` CLI demo | Madankumar | ✅ Code written, ⏳ verify in VM |
 | **6b. Functional tests** | `sudo python3 tests/functional_test.py` (T1–T13) | Pass/fail report | Arjun | ✅ Script written, ⏳ run in VM |
 | **7. Evaluation** | Run experiments (3 repeats × 2–3 modes), plot, analyse | `results/` CSVs + charts | Madankumar + Arjun | ⏳ To do |
 | **8. Tuning** | Adjust weights/topology if the results are unclear; re-run | Final numbers | Danielraj | ⏳ To do |
-| **9. Documentation** | Report, final slides, demo script, viva prep | Final review package | All | ⏳ To do |
+| **9. Documentation** | README and implementation plan (done); report, final slides, demo rehearsal (to do) | Final review package | All | 🟡 Partly done |
 
 ### 8.1 Phase 1 checklist (environment)
 Short version: steps 1–2 by hand, then `bash scripts/setup_vm.sh` does steps 3–5 and prints ok/fail for each check.
