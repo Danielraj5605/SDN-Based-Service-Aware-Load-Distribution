@@ -70,8 +70,11 @@ Or by hand:
 ```bash
 sudo apt update
 sudo apt install -y mininet openvswitch-switch iperf python3-pip python3-yaml python3-psutil
+sudo python3 -m pip install mininet
 pip3 install -r requirements.txt
-echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc && source ~/.bashrc
+echo 'export PATH=$HOME/.local/bin:$PATH' >> ~/.bashrc
+echo 'export PYTHONPATH=$HOME/.local/lib/python3.8/site-packages:$PYTHONPATH' >> ~/.bashrc
+source ~/.bashrc
 ```
 
 Copy this folder into the VM, e.g. `~/sdn-service-lb`, and run every command from inside it.

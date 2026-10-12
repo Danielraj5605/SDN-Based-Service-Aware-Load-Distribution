@@ -1,0 +1,3 @@
+round,mode,fairness,flows_srv1,flows_srv2,flows_srv3,flows_srv4,util_srv1,util_srv2,util_srv3,util_srv4
+1,round_robin,0.7098,2,2,2,2,0.7746,0.7281,0.3026,0.0599
+2,service_aware,0.5147,3,1,4,0,0.6797,0.6396,0.0202,0.0

@@ -1,0 +1,10 @@
+round,mode,fairness,flows_srv1,flows_srv2,flows_srv3,flows_srv4,util_srv1,util_srv2,util_srv3,util_srv4
+1,round_robin,0.7187,2,2,2,2,0.7743,0.7679,0.3262,0.0646
+2,service_aware,0.5955,1,1,4,2,0.8337,0.821,0.0267,0.1374
+3,service_aware_rebalance,0.5501,3,1,4,2,0.7786,0.7621,0.0249,0.0529
+4,service_aware_rebalance,0.5668,2,1,4,2,0.8468,0.832,0.0262,0.0878
+5,service_aware,0.5157,3,1,4,0,0.7897,0.7664,0.0249,0.0
+6,round_robin,0.7181,2,2,2,2,0.7738,0.7722,0.3261,0.0645
+7,round_robin,0.7189,2,2,2,2,0.8371,0.831,0.3533,0.0699
+8,service_aware,0.5157,3,1,4,0,0.79,0.7686,0.0249,0.0
+9,service_aware_rebalance,0.5724,2,1,4,2,0.8482,0.8323,0.0262,0.0979
