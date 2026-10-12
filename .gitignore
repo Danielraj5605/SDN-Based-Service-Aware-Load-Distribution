@@ -50,3 +50,7 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Additional explicit ignores requested
+*.pyc
+*.tmp

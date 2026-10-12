@@ -39,7 +39,7 @@ scoring:
   unknown_health: 0.5         # health factor used while a server's agent is silent
   max_sessions: 20            # sessions at which the session part of health reaches 0
   health_mix: {cpu: 0.5, mem: 0.2, sessions: 0.3}
-  pending_window: 4           # seconds a fresh assignment reserves its expected bandwidth
+  pending_window: 6           # seconds a fresh assignment reserves its expected bandwidth
 
 # Service classes. Ports are destination ports on the VIP; "a-b" is a range.
 # Score = health*w1 + bandwidth*w2 + latency*w3 + loss*w4 + match*w5
@@ -55,7 +55,7 @@ services:
     weights: {health: 0.15, bandwidth: 0.05, latency: 0.50, loss: 0.15, match: 0.15}
   file:
     ports: {tcp: [20, 21, 22, 2121]}
-    expected_mbps: 20
+    expected_mbps: 80
     weights: {health: 0.25, bandwidth: 0.30, latency: 0.05, loss: 0.25, match: 0.15}
   default:                    # anything not matched above (web, ICMP, ...)
     ports: {}

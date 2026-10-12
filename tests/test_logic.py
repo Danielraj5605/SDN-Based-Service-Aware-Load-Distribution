@@ -232,6 +232,42 @@ class NetworkMonitorTests(unittest.TestCase):
         self.assertAlmostEqual(self.s1.used_mbps, 100 * self.cfg.monitoring['ewma_alpha'])
         self.mon.port_stats([(99, 5, 5)], NOW + 3)                     # unknown port ignored
 
+    def test_probe_loss_warmup(self):
+        # Initial misses before the server first responds should not register as packet loss once UP
+        mon = NetworkMonitor(self.cfg, self.cfg.servers, LOG)
+        s = self.cfg.servers[0]
+        # Miss 2 probes before coming up
+        mon.next_probe(s, NOW)
+        mon.next_probe(s, NOW + 1)
+        mon.expire_probes(NOW + 3)
+        self.assertFalse(s.up)
+        # Server answers probe
+        seq = mon.next_probe(s, NOW + 4)
+        mon.probe_reply(s.ip, NetworkMonitor.PROBE_ID, seq, NOW + 4.002)
+        mon.update_availability()
+        self.assertTrue(s.up)
+        self.assertEqual(s.loss_rate(), 0.0)
+
+
+class IntegratedScoringTests(unittest.TestCase):
+    def setUp(self):
+        self.cfg = make_cfg()
+        self.s1, self.s2, self.s3, self.s4 = self.cfg.servers
+        NetworkMonitor(self.cfg, self.cfg.servers, LOG)
+        self.engine = DecisionEngine(self.cfg)
+        for s in self.cfg.servers:
+            healthy(s, 4.0)
+        self.s4.cpu = 50.0
+        self.s4.rtt_ms = 20.0
+
+    def test_video_avoids_server_with_bulk_file(self):
+        # When srv1 and srv2 carry bulk file transfers, video should pick idle srv4
+        self.s1.record_assignment(NOW, self.cfg.expected_mbps('file'))
+        self.s2.record_assignment(NOW, self.cfg.expected_mbps('file'))
+        server, reason, scores = self.engine.select(SERVICE_AWARE, 'video', self.cfg.servers, NOW + 1)
+        self.assertEqual(server.name, 'srv4')
+        self.assertGreater(scores['srv4'], scores['srv1'])
+
 
 if __name__ == '__main__':
     unittest.main()
