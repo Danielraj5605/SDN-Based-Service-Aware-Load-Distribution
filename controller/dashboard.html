@@ -3,314 +3,594 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Load Balancer Dashboard</title>
+<title>SDN Service-Aware Load Balancer — Live Faculty Dashboard</title>
 <style>
 :root {
-  color-scheme: light;
-  --surface-0: #f4f3f0; --surface-1: #fcfcfb; --border: #e4e3df; --grid: #ecebe7;
-  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
-  --accent: #2a78d6;
-  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
-  --good: #0ca30c; --critical: #d03b3b; --warning: #fab219;
-  --best-bg: #e3eefb;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --surface-0: #111110; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
-    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
-    --accent: #3987e5;
-    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
-    --best-bg: #1c3350;
-  }
-}
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --surface-0: #111110; --surface-1: #1a1a19; --border: #2e2e2c; --grid: #262624;
-  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
-  --accent: #3987e5;
-  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
-  --best-bg: #1c3350;
+  --bg: #0d1117;
+  --surface-1: #161b22;
+  --surface-2: #21262d;
+  --border: #30363d;
+  --text-main: #f0f6fc;
+  --text-sub: #8b949e;
+  --text-dim: #6e7681;
+  --accent: #58a6ff;
+  --accent-glow: rgba(88, 166, 255, 0.15);
+  --success: #3fb950;
+  --success-bg: rgba(63, 185, 80, 0.15);
+  --danger: #f85149;
+  --danger-bg: rgba(248, 81, 73, 0.15);
+  --warning: #d29922;
+  --s1: #58a6ff; --s2: #f0883e; --s3: #3fb950; --s4: #d29922;
+  --best-bg: rgba(88, 166, 255, 0.22);
 }
 * { box-sizing: border-box; }
 body {
-  margin: 0; background: var(--surface-0); color: var(--text-primary);
-  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  margin: 0; background: var(--bg); color: var(--text-main);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
-main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-bottom: 16px; }
-h1 { font-size: 20px; margin: 0; font-weight: 600; }
-h2 { font-size: 14px; margin: 0 0 10px; font-weight: 600; color: var(--text-secondary); }
-.meta { color: var(--text-secondary); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
-.controls { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; }
-.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.seg button {
-  border: 0; background: var(--surface-1); color: var(--text-secondary);
-  padding: 6px 12px; font: inherit; cursor: pointer;
+main { max-width: 1400px; margin: 0 auto; padding: 24px 20px 48px; }
+header {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 16px; padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
 }
-.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
-.panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-bottom: 12px; }
-.card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
-.card-head strong { font-size: 15px; }
-.card-head .ip { color: var(--text-muted); font-size: 12px; }
-.state { margin-left: auto; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
-.state svg { width: 12px; height: 12px; }
-dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 10px; font-size: 13px; }
-dt { color: var(--text-secondary); }
-dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-.meter { height: 8px; border-radius: 4px; background: var(--grid); overflow: hidden; margin: 2px 0 10px; }
-.meter > div { height: 100%; border-radius: 4px; background: var(--accent); transition: width .4s; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-th, td { padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--grid); }
-th { color: var(--text-secondary); font-weight: 500; }
-td.num, th.num { text-align: right; }
-.scores td.best { background: var(--best-bg); font-weight: 600; }
-.chart-wrap { position: relative; }
-svg.chart { width: 100%; height: 220px; display: block; }
-svg.chart text { fill: var(--text-muted); font-size: 11px; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
-.legend span { display: inline-flex; align-items: center; gap: 5px; }
-.tooltip {
-  position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
-  border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.12);
-  display: none; white-space: nowrap;
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand h1 { font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.5px; }
+.badge-vip {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 10px; font-size: 13px; font-family: monospace; color: var(--accent); font-weight: 600;
 }
-.error { color: var(--critical); font-size: 13px; margin: 0 0 12px; display: none; }
-.two { display: grid; grid-template-columns: 1fr; gap: 12px; }
-@media (min-width: 900px) { .two { grid-template-columns: 1.3fr 1fr; } }
-.empty { color: var(--text-muted); font-size: 13px; }
-.flows-scroll { max-height: 260px; overflow: auto; }
-.grid > *, .two > * { min-width: 0; }
-.table-scroll { overflow-x: auto; }
-@media (max-width: 600px) { .controls { margin-left: 0; } }
+.meta-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 16px; font-size: 14px; color: var(--text-sub);
+}
+.meta-item { display: inline-flex; align-items: center; gap: 6px; }
+.meta-item strong { color: var(--text-main); }
+.status-pill {
+  padding: 3px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; text-transform: uppercase;
+}
+.status-pill.connected { background: var(--success-bg); color: var(--success); border: 1px solid var(--success); }
+.status-pill.disconnected { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger); }
+
+/* Control Bars */
+.controls-bar {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 24px;
+}
+.btn-group {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-1);
+}
+.btn-group button {
+  border: 0; background: transparent; color: var(--text-sub); padding: 8px 16px;
+  font: 14px/1.4 inherit; font-weight: 600; cursor: pointer; transition: all .15s ease;
+  border-right: 1px solid var(--border);
+}
+.btn-group button:last-child { border-right: none; }
+.btn-group button:hover { color: var(--text-main); background: var(--surface-2); }
+.btn-group button[aria-pressed="true"] {
+  background: var(--accent); color: #0d1117; font-weight: 700;
+}
+.btn-toggle-drawer {
+  background: var(--surface-1); border: 1px solid var(--border); color: var(--text-main);
+  padding: 8px 14px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.btn-toggle-drawer:hover { background: var(--surface-2); border-color: var(--text-dim); }
+
+/* Panels and Cards */
+.panel {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); margin-bottom: 20px;
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+}
+.panel-header h2 {
+  font-size: 17px; font-weight: 700; margin: 0; color: var(--text-main); letter-spacing: -0.2px;
+}
+
+/* Server Cards Grid */
+.server-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px;
+}
+.server-card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 18px; position: relative; transition: transform .15s ease, border-color .15s ease;
+}
+.server-card:hover { border-color: var(--text-dim); }
+.card-top {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+}
+.card-id { display: flex; align-items: center; gap: 10px; }
+.server-indicator { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+.server-name { font-size: 18px; font-weight: 700; }
+.server-ip { font-size: 13px; color: var(--text-sub); font-family: monospace; }
+.card-state {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700;
+  padding: 3px 8px; border-radius: 6px; text-transform: uppercase;
+}
+.card-state.up { background: var(--success-bg); color: var(--success); }
+.card-state.down { background: var(--danger-bg); color: var(--danger); }
+
+.stat-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; font-size: 13.5px; margin-bottom: 12px;
+}
+.stat-box { display: flex; flex-direction: column; }
+.stat-label { color: var(--text-sub); font-size: 12px; }
+.stat-val { font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, monospace; }
+
+.bw-meter-wrap { margin-top: 6px; margin-bottom: 12px; }
+.bw-label-bar {
+  display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-sub); margin-bottom: 4px;
+}
+.meter {
+  height: 9px; border-radius: 5px; background: var(--surface-2); overflow: hidden;
+}
+.meter-fill {
+  height: 100%; border-radius: 5px; background: var(--accent); transition: width .4s ease;
+}
+
+.tags-bar { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.tag {
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-sub);
+  font-size: 11px; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; font-weight: 600;
+}
+
+/* Two Column Layout */
+.two-col { display: grid; grid-template-columns: 1.25fr 1fr; gap: 20px; margin-bottom: 20px; }
+@media (max-width: 1050px) { .two-col { grid-template-columns: 1fr; } }
+
+/* Last Decision Banner */
+.decision-banner {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.08), rgba(63, 185, 80, 0.05));
+  border: 1px solid var(--accent); border-radius: 12px; padding: 18px 20px; margin-bottom: 24px;
+}
+.decision-header {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 12px;
+}
+.decision-header strong { font-size: 16px; color: var(--accent); }
+.winner-pill {
+  background: var(--success-bg); color: var(--success); border: 1px solid var(--success);
+  font-size: 15px; font-weight: 700; padding: 4px 12px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px;
+}
+.bd-table {
+  width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 10px;
+}
+.bd-table th, .bd-table td {
+  padding: 7px 10px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.bd-table th { color: var(--text-sub); font-weight: 600; }
+.bd-table tr.winner-row { background: var(--best-bg); font-weight: 700; color: #fff; }
+.bd-table td.num, .bd-table th.num { text-align: right; }
+
+/* Tables */
+table.styled { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.styled th, table.styled td {
+  padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border);
+}
+table.styled th { color: var(--text-sub); font-weight: 600; font-size: 13px; }
+table.styled td.num, table.styled th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.styled tr:hover { background: var(--surface-2); }
+table.scores-table td.best-score {
+  background: var(--best-bg); color: var(--accent); font-weight: 700; border-radius: 4px;
+}
+
+/* Weights Drawer */
+.weights-panel {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px; margin-bottom: 20px; display: none;
+}
+.weights-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;
+}
+.weight-card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+}
+.weight-row {
+  display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin: 4px 0;
+}
+.weight-input {
+  width: 60px; background: var(--surface-2); border: 1px solid var(--border); color: #fff;
+  padding: 3px 6px; border-radius: 4px; text-align: right; font-family: monospace; font-size: 13px;
+}
+.btn-save-weights {
+  background: var(--accent); color: #0d1117; border: 0; border-radius: 6px; padding: 5px 12px;
+  font-weight: 700; cursor: pointer; margin-top: 8px; width: 100%;
+}
+.btn-save-weights:hover { opacity: 0.9; }
+
+/* SVG Chart */
+.chart-container { position: relative; width: 100%; }
+svg.latency-chart { width: 100%; height: 230px; display: block; overflow: visible; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--text-sub); margin-bottom: 8px; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Error banner */
+.error-banner {
+  background: var(--danger-bg); border: 1px solid var(--danger); color: var(--danger);
+  padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; display: none; font-weight: 600;
+}
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>Service-Aware Load Balancer</h1>
-    <div class="meta" id="meta">connecting…</div>
-    <div class="controls">
-      <div class="seg" role="group" aria-label="Mode">
-        <button data-mode="service_aware">Service-aware</button>
-        <button data-mode="round_robin">Round robin</button>
-      </div>
-      <div class="seg" role="group" aria-label="Live rebalancing">
-        <button data-rebalance="true">Rebalance on</button>
-        <button data-rebalance="false">Off</button>
-      </div>
+    <div class="brand">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2">
+        <rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/>
+        <line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+      </svg>
+      <h1>SDN Service-Aware Load Balancer</h1>
+      <span class="badge-vip" id="vip-badge">VIP: 10.0.0.100</span>
+    </div>
+    <div class="meta-bar" id="meta-bar">
+      <span class="meta-item"><span class="status-pill disconnected" id="switch-pill">Switch Connecting…</span></span>
+      <span class="meta-item">Decisions: <strong id="decision-count-val">0</strong></span>
+      <span class="meta-item">Latency (p95): <strong id="decision-latency-val">–</strong></span>
+      <span class="meta-item">Active Flows: <strong id="active-flows-count">0</strong></span>
     </div>
   </header>
-  <p class="error" id="error"></p>
 
-  <section class="grid" id="servers"></section>
+  <div class="error-banner" id="error-banner"></div>
 
-  <section class="two">
-    <div class="panel">
-      <h2>Round-trip latency to each server (ms), last 2 minutes</h2>
-      <div class="legend" id="legend"></div>
-      <div class="chart-wrap">
-        <svg class="chart" id="chart" role="img" aria-label="Latency per server over time"></svg>
-        <div class="tooltip" id="tip"></div>
-      </div>
+  <!-- Interactive Controls Bar -->
+  <div class="controls-bar">
+    <div style="font-weight:700; color:var(--text-sub); font-size:13px; text-transform:uppercase">Routing Mode:</div>
+    <div class="btn-group" role="group" aria-label="Mode Selection">
+      <button id="btn-sa" data-mode="service_aware">Service-Aware</button>
+      <button id="btn-rr" data-mode="round_robin">Round Robin</button>
     </div>
-    <div class="panel">
-      <h2>Suitability score per service (highlight = would be chosen)</h2>
-      <div class="table-scroll"><table class="scores" id="scores"></table></div>
+
+    <div style="font-weight:700; color:var(--text-sub); font-size:13px; text-transform:uppercase; margin-left:12px">UDP Rebalance:</div>
+    <div class="btn-group" role="group" aria-label="Rebalance Toggle">
+      <button id="btn-rb-on" data-rebalance="true">Enabled</button>
+      <button id="btn-rb-off" data-rebalance="false">Disabled</button>
+    </div>
+
+    <button class="btn-toggle-drawer" id="toggle-weights-btn" style="margin-left:auto">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M6 20V10M18 20V4"/></svg>
+      Adjust Weights
+    </button>
+  </div>
+
+  <!-- Weights Configuration Drawer -->
+  <div class="weights-panel" id="weights-drawer">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+      <strong style="font-size:15px; color:var(--text-main)">Service Weight Profiles (Normalized automatically)</strong>
+      <span style="font-size:12px; color:var(--text-sub)">Higher weight increases sensitivity to that factor</span>
+    </div>
+    <div class="weights-grid" id="weights-form-grid"></div>
+  </div>
+
+  <!-- Faculty "Last Decision" Breakdown Panel -->
+  <section class="decision-banner" id="last-decision-panel">
+    <div class="decision-header">
+      <div>
+        <strong>Last Decision Engine Breakdown:</strong>
+        <span id="last-dec-summary" style="margin-left:8px; color:var(--text-main); font-size:14.5px">Listening for new flows…</span>
+      </div>
+      <div id="last-dec-winner"></div>
+    </div>
+    <div id="last-dec-details" style="display:none">
+      <div style="font-size:13px; color:var(--text-sub); margin-bottom:8px">
+        Score formula: <code>Score = w_health·H + w_bandwidth·B + w_latency·L + w_loss·P + w_match·M</code>
+      </div>
+      <table class="bd-table" id="last-dec-table"></table>
     </div>
   </section>
 
-  <section class="panel" style="margin-top:12px">
-    <h2 id="flows-title">Active flows</h2>
-    <div class="flows-scroll"><table id="flows"></table></div>
+  <!-- Server Pool Cards -->
+  <section class="server-grid" id="server-cards"></section>
+
+  <!-- Two Column Layout: Latency Chart + Live Scoring Matrix -->
+  <div class="two-col">
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Server Probing Latency (ms) — Real-Time ICMP</h2>
+      </div>
+      <div class="chart-legend" id="chart-legend"></div>
+      <div class="chart-container">
+        <svg class="latency-chart" id="latency-svg"></svg>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Live Suitability Matrix (High Score Highlighted)</h2>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="styled scores-table" id="scores-table"></table>
+      </div>
+    </section>
+  </div>
+
+  <!-- Active Flows Section -->
+  <section class="panel">
+    <div class="panel-header">
+      <h2 id="flows-header">Active OpenFlow Load-Balanced Flows (0)</h2>
+      <span style="font-size:12px; color:var(--text-sub)">Auto-expires after idle timeout (10s)</span>
+    </div>
+    <div style="overflow-x:auto; max-height:280px">
+      <table class="styled" id="flows-table"></table>
+    </div>
   </section>
 </main>
 
 <script>
-const SERIES = ['--s1', '--s2', '--s3', '--s4'];
-const HISTORY = 60;                 // samples (2 s apart) = 2 minutes
-const history = {};                 // server -> [{t, rtt}]
-let last = null;
+const COLORS = ['#58a6ff', '#f0883e', '#3fb950', '#d29922'];
+const HISTORY_LEN = 60;
+const rttHistory = {};
+let latestStatus = null;
 
-const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const colorOf = i => css(SERIES[i % SERIES.length]);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = (v, d = 1) => v === null || v === undefined ? '–' : Number(v).toFixed(d);
-const unit = (v, d, u) => v === null || v === undefined ? '–' : Number(v).toFixed(d) + ' ' + u;
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 
 async function api(method, path, body) {
-  const r = await fetch(path, {method, headers: {'Content-Type': 'application/json'},
-                               body: body ? JSON.stringify(body) : undefined});
-  if (!r.ok) throw new Error(path + ': HTTP ' + r.status);
-  return r.json();
+  const opts = { method, headers: {'Content-Type': 'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(path, opts);
+  if (!res.ok) throw new Error(path + ' HTTP ' + res.status);
+  return res.json();
 }
 
-const ICON_UP = '<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="var(--good)"/><path d="M3.5 6.2l1.7 1.6 3.3-3.4" stroke="#fff" stroke-width="1.5" fill="none"/></svg>';
-const ICON_DOWN = '<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="var(--critical)"/><path d="M4 4l4 4M8 4l-4 4" stroke="#fff" stroke-width="1.5"/></svg>';
+function renderMeta(st) {
+  const switchPill = document.getElementById('switch-pill');
+  if (st.switch_connected) {
+    switchPill.className = 'status-pill connected';
+    switchPill.textContent = 'Switch Connected';
+  } else {
+    switchPill.className = 'status-pill disconnected';
+    switchPill.textContent = 'Switch Offline';
+  }
+  document.getElementById('decision-count-val').textContent = st.decisions;
+  document.getElementById('decision-latency-val').textContent = (st.decision_ms?.p95 !== null && st.decision_ms?.p95 !== undefined) ? `${st.decision_ms.p95} ms` : '–';
+  document.getElementById('active-flows-count').textContent = st.active_flows;
+
+  // Toggle buttons
+  document.getElementById('btn-sa').setAttribute('aria-pressed', String(st.mode === 'service_aware'));
+  document.getElementById('btn-rr').setAttribute('aria-pressed', String(st.mode === 'round_robin'));
+  document.getElementById('btn-rb-on').setAttribute('aria-pressed', String(st.rebalance?.enabled === true));
+  document.getElementById('btn-rb-off').setAttribute('aria-pressed', String(st.rebalance?.enabled === false));
+}
 
 function renderServers(st) {
-  document.getElementById('servers').innerHTML = st.servers.map((s, i) => {
-    const pct = s.capacity_mbps ? Math.min(100, 100 * s.used_mbps / s.capacity_mbps) : 0;
-    return `<article class="panel">
-      <div class="card-head">
-        <span class="swatch" style="background:${colorOf(i)}"></span>
-        <strong>${esc(s.name)}</strong><span class="ip">${esc(s.ip)}</span>
-        <span class="state">${s.up ? ICON_UP + 'Up' : ICON_DOWN + 'Down'}</span>
+  const container = document.getElementById('server-cards');
+  container.innerHTML = st.servers.map((s, idx) => {
+    const col = COLORS[idx % COLORS.length];
+    const pct = s.capacity_mbps > 0 ? Math.min(100, Math.round(100 * s.used_mbps / s.capacity_mbps)) : 0;
+    return `
+    <article class="server-card">
+      <div class="card-top">
+        <div class="card-id">
+          <div class="server-indicator" style="background:${col}"></div>
+          <div>
+            <div class="server-name">${esc(s.name)}</div>
+            <div class="server-ip">${esc(s.ip)} · Port ${s.switch_port}</div>
+          </div>
+        </div>
+        <span class="card-state ${s.up ? 'up' : 'down'}">${s.up ? '● UP' : '▲ DOWN'}</span>
       </div>
-      <dl>
-        <dt>Bandwidth used</dt><dd>${fmt(s.used_mbps)} / ${fmt(s.capacity_mbps, 0)} Mbit/s</dd>
-      </dl>
-      <div class="meter" title="${fmt(pct, 0)}% of link"><div style="width:${pct}%"></div></div>
-      <dl>
-        <dt>RTT</dt><dd>${unit(s.rtt_ms, 2, 'ms')}</dd>
-        <dt>Probe loss</dt><dd>${unit(s.loss_pct, 1, '%')}</dd>
-        <dt>CPU / memory</dt><dd>${s.agent_ok ? fmt(s.cpu) + ' % / ' + fmt(s.mem) + ' %' : 'agent silent'}</dd>
-        <dt>Sessions</dt><dd>${s.sessions}</dd>
-        <dt>Flows assigned</dt><dd>${s.assigned_total}</dd>
-        <dt>Designated for</dt><dd>${esc(s.services.join(', '))}</dd>
-      </dl>
+
+      <div class="bw-meter-wrap">
+        <div class="bw-label-bar">
+          <span>Bandwidth Load</span>
+          <span><strong>${fmt(s.used_mbps)}</strong> / ${s.capacity_mbps} Mbit/s (${pct}%)</span>
+        </div>
+        <div class="meter"><div class="meter-fill" style="width:${pct}%; background:${pct > 80 ? 'var(--danger)' : col}"></div></div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-box"><span class="stat-label">RTT Latency</span><span class="stat-val" style="color:${(s.rtt_ms && s.rtt_ms > 50) ? 'var(--warning)' : 'inherit'}">${fmt(s.rtt_ms, 2)} ms</span></div>
+        <div class="stat-box"><span class="stat-label">Link Packet Loss</span><span class="stat-val">${fmt(s.loss_pct, 1)} %</span></div>
+        <div class="stat-box"><span class="stat-label">CPU / Memory</span><span class="stat-val">${s.agent_ok ? `${fmt(s.cpu)}% / ${fmt(s.mem)}%` : '<em style="color:var(--text-dim)">neutral</em>'}</span></div>
+        <div class="stat-box"><span class="stat-label">Sessions / Flows</span><span class="stat-val">${s.sessions} sess / ${s.active_flows} flows</span></div>
+      </div>
+
+      <div class="tags-bar">
+        ${s.services.map(svc => `<span class="tag">${esc(svc)}</span>`).join('')}
+      </div>
     </article>`;
   }).join('');
 }
 
 function renderScores(st) {
+  const table = document.getElementById('scores-table');
   const services = Object.keys(st.weights);
-  const up = st.servers.filter(s => s.up);
-  let html = '<tr><th>Service</th>' + st.servers.map(s => `<th class="num">${esc(s.name)}</th>`).join('') + '</tr>';
+  const upServers = st.servers.filter(s => s.up);
+
+  let html = '<thead><tr><th>Service Profile</th>' + st.servers.map(s => `<th class="num">${esc(s.name)}</th>`).join('') + '</tr></thead><tbody>';
+
   for (const svc of services) {
-    const best = up.length ? up.reduce((a, b) => (b.scores[svc] > a.scores[svc] ? b : a)) : null;
-    html += `<tr><td>${esc(svc)}</td>` + st.servers.map(s =>
-      `<td class="num${st.mode === 'service_aware' && best && s.name === best.name ? ' best' : ''}">${s.up ? fmt(s.scores[svc], 3) : '–'}</td>`
-    ).join('') + '</tr>';
+    const bestServer = upServers.length ? upServers.reduce((a, b) => ((b.scores[svc] || 0) > (a.scores[svc] || 0) ? b : a)) : null;
+    html += `<tr><td><strong>${esc(svc.toUpperCase())}</strong></td>`;
+    for (const s of st.servers) {
+      const isBest = (st.mode === 'service_aware' && bestServer && s.name === bestServer.name);
+      html += `<td class="num ${isBest ? 'best-score' : ''}">${s.up ? fmt(s.scores[svc], 3) : '<span style="color:var(--text-dim)">DOWN</span>'}</td>`;
+    }
+    html += '</tr>';
   }
-  document.getElementById('scores').innerHTML = html;
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+
+function renderLastDecision(st) {
+  const dec = st.last_decision;
+  const panel = document.getElementById('last-decision-panel');
+  const sumEl = document.getElementById('last-dec-summary');
+  const winEl = document.getElementById('last-dec-winner');
+  const detEl = document.getElementById('last-dec-details');
+  const tbl = document.getElementById('last-dec-table');
+
+  if (!dec) {
+    sumEl.textContent = 'Waiting for traffic to VIP 10.0.0.100…';
+    winEl.innerHTML = '';
+    detEl.style.display = 'none';
+    return;
+  }
+
+  const ago = Math.max(0, Math.round(Date.now() / 1000 - dec.time));
+  sumEl.innerHTML = `Flow <strong>${esc(dec.client)}${dec.dst_port ? ':' + dec.dst_port : ''}</strong> [<strong>${esc(dec.service.toUpperCase())}</strong> / ${esc(dec.proto)}] routed in <strong>${dec.decision_ms} ms</strong> (${ago}s ago)`;
+  winEl.innerHTML = `<span class="winner-pill">Assigned → ${esc(dec.server)}</span>`;
+  detEl.style.display = 'block';
+
+  if (dec.breakdown && Object.keys(dec.breakdown).length) {
+    let html = '<thead><tr><th>Server</th><th class="num">Health (H)</th><th class="num">Bandwidth (B)</th><th class="num">Latency (L)</th><th class="num">Loss (P)</th><th class="num">Match (M)</th><th class="num">Total Score</th></tr></thead><tbody>';
+    for (const [srvName, data] of Object.entries(dec.breakdown)) {
+      const isWinner = (srvName === dec.server);
+      const f = data.factors || {};
+      html += `<tr class="${isWinner ? 'winner-row' : ''}">
+        <td><strong>${esc(srvName)}</strong> ${isWinner ? '★ CHOSEN' : ''}</td>
+        <td class="num">${fmt(f.health, 3)}</td>
+        <td class="num">${fmt(f.bandwidth, 3)}</td>
+        <td class="num">${fmt(f.latency, 3)}</td>
+        <td class="num">${fmt(f.loss, 3)}</td>
+        <td class="num">${fmt(f.match, 2)}</td>
+        <td class="num" style="font-weight:700">${fmt(data.total, 3)}</td>
+      </tr>`;
+    }
+    html += '</tbody>';
+    tbl.innerHTML = html;
+  } else {
+    tbl.innerHTML = `<tr><td style="color:var(--text-sub)">Mode: ${esc(dec.reason || st.mode)}</td></tr>`;
+  }
 }
 
 function renderFlows(flows) {
-  document.getElementById('flows-title').textContent = `Active flows (${flows.length})`;
+  document.getElementById('flows-header').textContent = `Active OpenFlow Load-Balanced Flows (${flows.length})`;
+  const tbl = document.getElementById('flows-table');
   if (!flows.length) {
-    document.getElementById('flows').innerHTML = '<tr><td class="empty">No active load-balanced flows.</td></tr>';
+    tbl.innerHTML = '<tr><td style="color:var(--text-dim); padding:16px; text-align:center">No active flows traversing OpenFlow VIP rules.</td></tr>';
     return;
   }
-  const proto = {6: 'TCP', 17: 'UDP', 1: 'ICMP'};
+  const protoMap = {6: 'TCP', 17: 'UDP', 1: 'ICMP'};
   const now = Date.now() / 1000;
-  document.getElementById('flows').innerHTML =
-    '<tr><th>Client</th><th>Protocol</th><th class="num">Src port</th><th class="num">Dst port</th><th>Service</th><th>Server</th><th class="num">Age</th></tr>' +
-    flows.sort((a, b) => b.since - a.since).map(f => `<tr>
-      <td>${esc(f.client)}</td><td>${proto[f.proto] || f.proto}</td>
-      <td class="num">${f.src_port ?? '–'}</td><td class="num">${f.dst_port ?? '–'}</td>
-      <td>${esc(f.service)}</td><td>${esc(f.server)}</td><td class="num">${fmt(now - f.since, 0)} s</td></tr>`).join('');
+  let html = '<thead><tr><th>Client Source</th><th>Protocol</th><th class="num">Src Port</th><th class="num">VIP Dst Port</th><th>Service</th><th>Assigned Server</th><th class="num">Duration</th></tr></thead><tbody>';
+  flows.sort((a,b) => b.since - a.since).forEach(f => {
+    html += `<tr>
+      <td><code>${esc(f.client)}</code></td>
+      <td><span class="tag">${protoMap[f.proto] || f.proto}</span></td>
+      <td class="num">${f.src_port ?? '–'}</td>
+      <td class="num">${f.dst_port ?? '–'}</td>
+      <td><strong>${esc(f.service)}</strong></td>
+      <td><strong style="color:var(--accent)">${esc(f.server)}</strong></td>
+      <td class="num">${fmt(now - f.since, 0)} s</td>
+    </tr>`;
+  });
+  html += '</tbody>';
+  tbl.innerHTML = html;
 }
 
 function renderChart() {
-  const svg = document.getElementById('chart');
-  const W = svg.clientWidth || 600, H = 220, L = 40, R = 52, T = 10, B = 22;
-  const names = Object.keys(history);
-  const all = names.flatMap(n => history[n].map(p => p.rtt)).filter(v => v !== null);
-  const maxY = Math.max(10, ...all) * 1.1;
-  const t1 = Date.now() / 1000, t0 = t1 - HISTORY * 2;
+  const svg = document.getElementById('latency-svg');
+  const W = svg.clientWidth || 650, H = 230, L = 42, R = 50, T = 12, B = 24;
+  const names = Object.keys(rttHistory);
+  const allPts = names.flatMap(n => rttHistory[n].map(p => p.rtt)).filter(v => v !== null && v !== undefined);
+  const maxY = Math.max(30, ...allPts) * 1.15;
+  const t1 = Date.now() / 1000, t0 = t1 - HISTORY_LEN * 2;
   const x = t => L + (t - t0) / (t1 - t0) * (W - L - R);
   const y = v => T + (1 - v / maxY) * (H - T - B);
+
   let out = '';
   for (let i = 0; i <= 4; i++) {
-    const v = maxY * i / 4;
-    out += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${css('--grid')}"/>`;
-    out += `<text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v.toFixed(0)}</text>`;
+    const val = maxY * i / 4;
+    out += `<line x1="${L}" x2="${W - R}" y1="${y(val)}" y2="${y(val)}" stroke="var(--surface-2)" stroke-dasharray="2 2"/>`;
+    out += `<text x="${L - 8}" y="${y(val) + 4}" fill="var(--text-dim)" font-size="11" text-anchor="end">${val.toFixed(0)}</text>`;
   }
-  out += `<text x="${L}" y="${H - 6}">-2 min</text><text x="${W - R}" y="${H - 6}" text-anchor="end">now</text>`;
-  const labels = [];
-  names.forEach((n, i) => {
-    const pts = history[n].filter(p => p.rtt !== null && p.t >= t0);
+  out += `<text x="${L}" y="${H - 6}" fill="var(--text-dim)" font-size="11">-2 min</text><text x="${W - R}" y="${H - 6}" fill="var(--text-dim)" font-size="11" text-anchor="end">now</text>`;
+
+  names.forEach((n, idx) => {
+    const pts = (rttHistory[n] || []).filter(p => p.rtt !== null && p.t >= t0);
     if (!pts.length) return;
-    const d = pts.map((p, j) => (j ? 'L' : 'M') + x(p.t).toFixed(1) + ',' + y(p.rtt).toFixed(1)).join('');
-    out += `<path d="${d}" fill="none" stroke="${colorOf(i)}" stroke-width="2" stroke-linejoin="round"/>`;
-    const lp = pts[pts.length - 1];
-    labels.push({n, i, y: y(lp.rtt), x: x(lp.t)});
+    const col = COLORS[idx % COLORS.length];
+    const path = pts.map((p, j) => (j ? 'L' : 'M') + x(p.t).toFixed(1) + ',' + y(p.rtt).toFixed(1)).join('');
+    out += `<path d="${path}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round"/>`;
+    const lastP = pts[pts.length - 1];
+    out += `<circle cx="${x(lastP.t)}" cy="${y(lastP.rtt)}" r="3.5" fill="${col}"/>`;
+    out += `<text x="${x(lastP.t) + 6}" y="${y(lastP.rtt) + 4}" fill="${col}" font-size="11" font-weight="700">${esc(n)}</text>`;
   });
-  // Direct labels at the line ends, nudged apart so they never overlap.
-  labels.sort((a, b) => a.y - b.y);
-  for (let k = 1; k < labels.length; k++) labels[k].y = Math.max(labels[k].y, labels[k - 1].y + 12);
-  labels.forEach(l => {
-    out += `<circle cx="${l.x}" cy="${l.y}" r="3" fill="${colorOf(l.i)}" stroke="${css('--surface-1')}" stroke-width="2"/>`;
-    out += `<text x="${l.x + 6}" y="${l.y + 4}" style="fill:${css('--text-secondary')}">${esc(l.n)}</text>`;
-  });
-  out += `<line id="cross" y1="${T}" y2="${H - B}" stroke="${css('--text-muted')}" stroke-dasharray="3 3" visibility="hidden"/>`;
+
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.innerHTML = out;
-  svg.dataset.l = L; svg.dataset.r = W - R; svg.dataset.t0 = t0; svg.dataset.t1 = t1;
-  document.getElementById('legend').innerHTML = names.map((n, i) =>
-    `<span><span class="swatch" style="background:${colorOf(i)}"></span>${esc(n)}</span>`).join('');
+
+  document.getElementById('chart-legend').innerHTML = names.map((n, idx) =>
+    `<span><span class="server-indicator" style="background:${COLORS[idx % COLORS.length]}; display:inline-block"></span>${esc(n)}</span>`
+  ).join('');
 }
 
-function setupHover() {
-  const svg = document.getElementById('chart'), tip = document.getElementById('tip');
-  svg.addEventListener('mousemove', e => {
-    const rect = svg.getBoundingClientRect();
-    const px = (e.clientX - rect.left) * (svg.viewBox.baseVal.width / rect.width);
-    const L = +svg.dataset.l, R = +svg.dataset.r;
-    if (px < L || px > R) { tip.style.display = 'none'; return; }
-    const t = +svg.dataset.t0 + (px - L) / (R - L) * (svg.dataset.t1 - svg.dataset.t0);
-    const rows = Object.keys(history).map((n, i) => {
-      const pts = history[n];
-      if (!pts.length) return '';
-      const p = pts.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
-      return `<div><span class="swatch" style="display:inline-block;background:${colorOf(i)}"></span> ${esc(n)}: <b>${unit(p.rtt, 2, 'ms')}</b></div>`;
-    }).join('');
-    const ago = Math.max(0, Date.now() / 1000 - t);
-    tip.innerHTML = `<div style="color:var(--text-muted)">${ago.toFixed(0)} s ago</div>` + rows;
-    tip.style.display = 'block';
-    const left = e.clientX - rect.left + 12;
-    tip.style.left = Math.min(left, rect.width - tip.offsetWidth - 4) + 'px';
-    tip.style.top = '8px';
-    const cross = svg.querySelector('#cross');
-    cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
-  });
-  svg.addEventListener('mouseleave', () => {
-    tip.style.display = 'none';
-    const cross = svg.querySelector('#cross');
-    if (cross) cross.setAttribute('visibility', 'hidden');
-  });
+function initWeightsDrawer(st) {
+  const container = document.getElementById('weights-form-grid');
+  let html = '';
+  for (const [svc, w] of Object.entries(st.weights)) {
+    html += `
+    <div class="weight-card" data-service="${esc(svc)}">
+      <strong style="color:var(--accent); font-size:14px; text-transform:uppercase">${esc(svc)}</strong>
+      ${Object.keys(w).map(factor => `
+        <div class="weight-row">
+          <span>${factor}</span>
+          <input type="number" step="0.05" min="0" max="1" class="weight-input" data-factor="${factor}" value="${w[factor]}">
+        </div>
+      `).join('')}
+      <button class="btn-save-weights" onclick="saveWeights('${esc(svc)}')">Apply ${esc(svc)} Weights</button>
+    </div>`;
+  }
+  container.innerHTML = html;
 }
 
-function renderHeader(st) {
-  const d = st.decision_ms || {};
-  document.getElementById('meta').innerHTML =
-    `<span>VIP <b>${esc(st.vip)}</b></span>` +
-    `<span>Switch ${st.switch_connected ? 'connected' : '<b style="color:var(--critical)">not connected</b>'}</span>` +
-    `<span>${st.decisions} decisions</span>` +
-    `<span>decision time avg ${fmt(d.avg, 2)} ms · p95 ${fmt(d.p95, 2)} ms</span>` +
-    `<span>${st.rebalance.migrations} flows rebalanced</span>`;
-  document.querySelectorAll('[data-mode]').forEach(b =>
-    b.setAttribute('aria-pressed', String(b.dataset.mode === st.mode)));
-  document.querySelectorAll('[data-rebalance]').forEach(b =>
-    b.setAttribute('aria-pressed', String((b.dataset.rebalance === 'true') === st.rebalance.enabled)));
-}
+window.saveWeights = async function(svc) {
+  const card = document.querySelector(`.weight-card[data-service="${svc}"]`);
+  if (!card) return;
+  const weights = {};
+  card.querySelectorAll('.weight-input').forEach(inp => {
+    weights[inp.dataset.factor] = parseFloat(inp.value) || 0;
+  });
+  try {
+    await api('POST', '/lb/weights', {service: svc, weights});
+    tick();
+  } catch (e) {
+    alert('Error saving weights: ' + e.message);
+  }
+};
 
 async function tick() {
   try {
     const [st, flows] = await Promise.all([api('GET', '/lb/status'), api('GET', '/lb/flows')]);
-    last = st;
+    latestStatus = st;
+    document.getElementById('error-banner').style.display = 'none';
+
     for (const s of st.servers) {
-      (history[s.name] = history[s.name] || []).push({t: Date.now() / 1000, rtt: s.rtt_ms});
-      if (history[s.name].length > HISTORY) history[s.name].shift();
+      (rttHistory[s.name] = rttHistory[s.name] || []).push({t: Date.now() / 1000, rtt: s.rtt_ms});
+      if (rttHistory[s.name].length > HISTORY_LEN) rttHistory[s.name].shift();
     }
-    renderHeader(st); renderServers(st); renderScores(st); renderFlows(flows); renderChart();
-    document.getElementById('error').style.display = 'none';
-  } catch (e) {
-    const el = document.getElementById('error');
-    el.textContent = 'Cannot reach the controller (' + e.message + '). Is ryu-manager running?';
-    el.style.display = 'block';
+
+    renderMeta(st);
+    renderLastDecision(st);
+    renderServers(st);
+    renderScores(st);
+    renderFlows(flows);
+    renderChart();
+
+    if (!document.getElementById('weights-form-grid').children.length) {
+      initWeightsDrawer(st);
+    }
+  } catch (err) {
+    const banner = document.getElementById('error-banner');
+    banner.textContent = 'Controller Connection Warning: ' + err.message + ' (Is ryu-manager running?)';
+    banner.style.display = 'block';
   }
 }
 
-document.querySelectorAll('[data-mode]').forEach(b =>
-  b.addEventListener('click', () => api('POST', '/lb/mode', {mode: b.dataset.mode}).then(tick)));
-document.querySelectorAll('[data-rebalance]').forEach(b =>
-  b.addEventListener('click', () => api('POST', '/lb/rebalance', {enabled: b.dataset.rebalance === 'true'}).then(tick)));
-window.addEventListener('resize', () => last && renderChart());
-setupHover();
+// Mode & Rebalance button handlers
+document.querySelectorAll('[data-mode]').forEach(btn => {
+  btn.addEventListener('click', () => api('POST', '/lb/mode', {mode: btn.dataset.mode}).then(tick));
+});
+document.querySelectorAll('[data-rebalance]').forEach(btn => {
+  btn.addEventListener('click', () => api('POST', '/lb/rebalance', {enabled: btn.dataset.rebalance === 'true'}).then(tick));
+});
+document.getElementById('toggle-weights-btn').addEventListener('click', () => {
+  const d = document.getElementById('weights-drawer');
+  d.style.display = d.style.display === 'block' ? 'none' : 'block';
+});
+window.addEventListener('resize', renderChart);
+
 tick();
 setInterval(tick, 2000);
 </script>

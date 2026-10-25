@@ -30,6 +30,7 @@ sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
   mininet openvswitch-switch iperf iperf3 curl git net-tools tshark \
   python3-pip python3-yaml python3-psutil > /dev/null
+sudo python3 -m pip install -q mininet
 sudo systemctl enable --now openvswitch-switch > /dev/null 2>&1 || true
 ok "apt packages installed"
 
@@ -40,7 +41,11 @@ python3 -m pip install --user -q -r "${PROJECT_DIR}/requirements.txt"
 if ! grep -q 'HOME/.local/bin' "${HOME}/.bashrc"; then
   echo 'export PATH=$HOME/.local/bin:$PATH' >> "${HOME}/.bashrc"
 fi
+if ! grep -q 'PYTHONPATH.*site-packages' "${HOME}/.bashrc"; then
+  echo 'export PYTHONPATH=$HOME/.local/lib/python3.8/site-packages:${PYTHONPATH:-}' >> "${HOME}/.bashrc"
+fi
 export PATH="${HOME}/.local/bin:${PATH}"
+export PYTHONPATH="${HOME}/.local/lib/python3.8/site-packages:${PYTHONPATH:-}"
 ok "pip packages installed"
 
 step "Verifying"

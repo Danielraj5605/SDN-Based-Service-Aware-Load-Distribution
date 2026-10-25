@@ -66,10 +66,22 @@ class ServiceAwareLoadBalancer(app_manager.RyuApp):
         self.decision_count = 0
         self.decision_ms = []       # recent decision times, for NFR-1 (decision latency)
         self.migrations = 0
+        self.last_decision = None
 
         self.decision_log = CsvLog(os.path.join(LOG_DIR, 'decisions.csv'), [
             'time', 'mode', 'client', 'proto', 'src_port', 'dst_port', 'service',
             'server', 'reason', 'decision_ms', 'scores'])
+        decisions_file = os.path.join(LOG_DIR, 'decisions.csv')
+        if os.path.exists(decisions_file):
+            try:
+                import csv
+                with open(decisions_file, 'r') as f:
+                    r = list(csv.DictReader(f))
+                    self.decision_count = len(r)
+                    self.decision_ms = [float(row['decision_ms']) for row in r
+                                        if row.get('decision_ms') and row['decision_ms'] not in ('', '0.000')][-999:]
+            except Exception:
+                pass
         self.metrics_log = CsvLog(os.path.join(LOG_DIR, 'metrics.csv'), [
             'time', 'server', 'up', 'agent_ok', 'cpu', 'mem', 'sessions', 'active_flows',
             'used_mbps', 'available_mbps', 'rtt_ms', 'loss_pct'])
@@ -278,6 +290,19 @@ class ServiceAwareLoadBalancer(app_manager.RyuApp):
                                    'moved_at': now, 'client_mac': eth.src, 'client_port': in_port}
             self._log_decision(now, ip.src, ip.proto, src_port, dst_port, service, server,
                                reason, scores, decision_ms)
+            bw_ref = self.engine.bandwidth_ref(self.servers)
+            bd = {}
+            for s in [cand for cand in self.servers if cand.up]:
+                tot, factors = self.engine.score(s, service, now, bw_ref)
+                bd[s.name] = {'total': round(tot, 3), 'factors': {k: round(v, 3) for k, v in factors.items()}}
+            proto_str = {in_proto.IPPROTO_TCP: 'TCP', in_proto.IPPROTO_UDP: 'UDP', in_proto.IPPROTO_ICMP: 'ICMP'}.get(ip.proto, str(ip.proto))
+            self.last_decision = {
+                'time': now, 'client': ip.src, 'proto': proto_str,
+                'src_port': src_port, 'dst_port': dst_port,
+                'service': service, 'server': server.name, 'reason': reason,
+                'decision_ms': round(decision_ms, 3),
+                'weights': {k: round(v, 3) for k, v in self.engine.weights(service).items()},
+                'scores': scores, 'breakdown': bd}
 
         actions = self.flows.install_lb_flows(dp, ip.src, eth.src, in_port, server,
                                               ip.proto, src_port, dst_port, cookie)
@@ -339,6 +364,7 @@ class ServiceAwareLoadBalancer(app_manager.RyuApp):
                     'max': round(times[-1], 3) if times else None},
                 'rebalance': dict(self.cfg.rebalance, migrations=self.migrations),
                 'weights': {svc: self.engine.weights(svc) for svc in self.cfg.services},
+                'last_decision': self.last_decision,
                 'servers': servers}
 
     def get_flows(self):

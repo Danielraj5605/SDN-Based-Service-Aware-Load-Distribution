@@ -1,0 +1,22 @@
+metric,mode,mean,std
+VoIP round-trip latency (ms),round_robin,273.40175,274.32195395063707
+VoIP round-trip latency (ms),service_aware,2.3899166666666667,0.05379499526119061
+VoIP round-trip latency (ms),service_aware_rebalance,2.3739166666666667,0.027314526049948745
+VoIP jitter (ms),round_robin,1.4785000000000001,1.3859124004850312
+VoIP jitter (ms),service_aware,0.1850833333333333,0.043498084249002665
+VoIP jitter (ms),service_aware_rebalance,0.17608333333333334,0.03825621359711229
+VoIP packet loss (%),round_robin,0.5583333333333332,1.013955650216547
+VoIP packet loss (%),service_aware,0.0,0.0
+VoIP packet loss (%),service_aware_rebalance,0.0,0.0
+Video delivered throughput (Mbit/s),round_robin,3.9608333333333334,0.04306003560921277
+Video delivered throughput (Mbit/s),service_aware,3.9623333333333335,0.03246331262620413
+Video delivered throughput (Mbit/s),service_aware_rebalance,3.9418333333333333,0.01884055908583046
+Video packet loss (%),round_robin,0.98,1.0775713433457665
+Video packet loss (%),service_aware,0.9416666666666668,0.8131031094926809
+Video packet loss (%),service_aware_rebalance,1.4533333333333331,0.4724263611047405
+File transfer throughput (Mbit/s),round_robin,98.90866666666666,0.7023399936403052
+File transfer throughput (Mbit/s),service_aware,96.60433333333334,3.10012862098763
+File transfer throughput (Mbit/s),service_aware_rebalance,97.30183333333332,1.2483793360460045
+Jain's fairness,round_robin,0.7185666666666667,0.0004163331998932429
+Jain's fairness,service_aware,0.5423000000000001,0.04607255148133213
+Jain's fairness,service_aware_rebalance,0.5631,0.011601293031382305

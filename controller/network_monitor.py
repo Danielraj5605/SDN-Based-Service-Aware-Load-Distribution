@@ -50,7 +50,8 @@ class NetworkMonitor:
         for seq, (server, sent_at) in list(self._outstanding.items()):
             if now - sent_at > self.timeout:
                 del self._outstanding[seq]
-                server.probe_window.append(False)
+                if server.up:
+                    server.probe_window.append(False)
                 server.consecutive_misses += 1
 
     def update_availability(self):
@@ -60,7 +61,10 @@ class NetworkMonitor:
             up_now = s.rtt_ms is not None and s.consecutive_misses < self.down_after
             if up_now != s.up:
                 s.up = up_now
-                if not up_now:
+                if up_now:
+                    s.probe_window.clear()
+                    s.probe_window.extend([True] * (s.probe_window.maxlen or 20))
+                else:
                     s.rtt_ms = None     # forget stale latency; the next reply brings it back up
                 changed.append(s)
         return changed
